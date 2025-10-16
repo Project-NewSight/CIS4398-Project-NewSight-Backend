@@ -1,0 +1,34 @@
+# ---- Python cache & build files ----
+__pycache__/
+*.py[cod]
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# ---- Virtual environments ----
+venv/
+.env/
+env/
+.venv/
+
+# ---- Environment files ----
+# (contains your Twilio keys, DB URIs, etc.)
+*.env
+
+# ---- VS Code settings ----
+.vscode/
+
+# ---- OS-specific junk ----
+.DS_Store
+Thumbs.db
+
+# ---- Logs ----
+*.log
+logs/
+
+# ---- Test & coverage ----
+.pytest_cache/
+.coverage
+htmlcov/
