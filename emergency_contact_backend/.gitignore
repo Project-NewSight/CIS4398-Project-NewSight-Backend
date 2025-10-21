@@ -7,28 +7,25 @@ __pycache__/
 dist/
 build/
 
-# ---- Virtual environments ----
 venv/
 .env/
 env/
 .venv/
 
-# ---- Environment files ----
-# (contains your Twilio keys, DB URIs, etc.)
+uploads/
+
 *.env
 
-# ---- VS Code settings ----
+
 .vscode/
 
-# ---- OS-specific junk ----
 .DS_Store
 Thumbs.db
 
-# ---- Logs ----
 *.log
 logs/
 
-# ---- Test & coverage ----
+
 .pytest_cache/
 .coverage
 htmlcov/
