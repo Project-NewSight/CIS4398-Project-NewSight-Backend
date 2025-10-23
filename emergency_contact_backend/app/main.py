@@ -1,3 +1,4 @@
+#Main API for the emergency contact feature
 import os
 from fastapi import FastAPI,Form,UploadFile, File
 from fastapi.responses import JSONResponse
@@ -12,7 +13,8 @@ def root():
     return {"message": "Emergency Contact backend Running Sucessfully!"}
 
 @app.post("/emergency/alert")
-async def emergency_alert(
+
+async def emergency_alert( 
 user_id: str = Form(...),
 latitude: float = Form(...),
 longitude: float = Form(...),
