@@ -13,7 +13,7 @@ def send_sms(to_number,message):
    
    response = client.sms.send({ #Sending messages
        "from_":"+16033338616", #vonage phone number don't change
-       "to": to_number,
+       "to": f"+1{to_number}",
        "text": message
        })
    
@@ -22,10 +22,6 @@ def send_sms(to_number,message):
          print("Message sent sucessfully")
       else:
          print("Failed to send message")
-     
-
-
-send_sms("+4012888347", "The Generator VJ Edgecomb is the goat")
 
 
 
