@@ -4,11 +4,13 @@ from fastapi import FastAPI,Form,UploadFile, File
 from fastapi.responses import JSONResponse
 from app.routes import sms_routes
 from app.routes import contacts
+from app.routes import emergency_alert
 
 app = FastAPI(title="Emergency Contact API", version="1.0")
 
 app.include_router(sms_routes.router)
 app.include_router(contacts.router)
+app.include_router(emergency_alert.router)
 
 @app.get("/")
 def root():
