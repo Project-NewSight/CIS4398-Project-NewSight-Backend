@@ -11,17 +11,34 @@ def send_sms(to_number,message):
    auth = vonage.Auth(api_key=VONAGE_API_KEY, api_secret=VONAGE_API_SECRET)
    client = vonage.Vonage(auth)
    
-   response = client.sms.send({ #Sending messages
-       "from_":"+16033338616", #vonage phone number don't change
-       "to": f"+1{to_number}",
-       "text": message
-       })
-   
-   for msg in response.messages: #checking for sucessfull send
-      if msg.status == "0":
-         print("Message sent sucessfully")
+   try:
+      response = client.sms.send({ #Sending messages
+          "from_":"+16033338616", #vonage phone number don't change
+         "to": f"+1{to_number}",
+         "text": message
+         })
+      
+      msg = response["messages"][0]
+      status = msg["status"]
+
+      if status == "0":
+         return{
+            "status": "success",
+            "to": to_number
+         }
       else:
-         print("Failed to send message")
+         return{
+            "status":"error",
+            "error": msg.get("error-text", "Unknown error"),
+            "to":to_number
+         }
+      
+      
+   except Exception as e:
+      return{"status": "error", "error": str(e), "to": to_number}
+
+   
+
 
 
 
