@@ -1,12 +1,16 @@
 #Main API for the emergency contact feature
 import os
 from fastapi import FastAPI,Form,UploadFile, File
+from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 from app.routes import sms_routes
 from app.routes import contacts
 from app.routes import emergency_alert
 
 app = FastAPI(title="Emergency Contact API", version="1.0")
+
+app.mount("/temp_photos", StaticFiles(directory="temp_photos"), name="temp_photos")
+
 
 app.include_router(sms_routes.router)
 app.include_router(contacts.router)
