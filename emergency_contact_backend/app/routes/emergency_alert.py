@@ -34,7 +34,11 @@ async def send_emergency_alert(user_id: int, request: Request, db: Session = Dep
         with open(temp_path,"wb") as f:
             f.write(await photo.read())
 
+        
         base_url = str(request.base_url).rstrip("/")
+        #if "127.0.0.1" in base_url or "localhost" in base_url:
+         #   base_url = "https://ourapidomain.com"  # replace with your backend URL
+
         image_url = f"{base_url}/temp_photos/{filename}"
 
     
