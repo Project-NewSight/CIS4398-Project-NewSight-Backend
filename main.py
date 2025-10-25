@@ -14,10 +14,10 @@ async def verify_face(image: UploadFile = File(...)):
     img = cv2.imdecode(np.frombuffer(buf, np.uint8), cv2.IMREAD_COLOR)
 
     result = DeepFace.find(
-        img_path="BillGates.jpg",
+        img_path=img,
         db_path="./db",
         model_name="ArcFace",
-        detector_backend="retinaface",
+        detector_backend="opencv",
         enforce_detection=False
     )
 
@@ -25,10 +25,18 @@ async def verify_face(image: UploadFile = File(...)):
         return {"match": False, "message": "No match found"}
 
     top = result[0].iloc[0]
+
+    distance_col = next(
+        (c for c in result[0].columns
+         if "distance" in c.lower() or "cosine" in c.lower() or "euclidean" in c.lower()),
+        None
+    )
+    distance = float(top[distance_col]) if distance_col else None
+
     return {
         "match": True,
         "person": top["identity"],
-        "distance": top["ArcFace_cosine"]
+        "distance": distance
     }
 
 
