@@ -5,7 +5,7 @@ from app.db import Base
 class EmergencyContact(Base):
     __tablename__ = "emergencycontact"
 
-    contact_id = Column(Integer, primary_key=True, index=True)
+    contact_id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     user_id = Column(Integer, nullable=False)
     name = Column(String(100))
     phone = Column(String(20))
