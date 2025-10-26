@@ -13,6 +13,15 @@ load_dotenv()
 AWS_REGION = os.getenv("AWS_REGION")
 BUCKET_NAME = os.getenv("AWS_S3_BUCKET_NAME")
 
+if not all([
+    os.getenv("AWS_ACCESS_KEY_ID"),
+    os.getenv("AWS_SECRET_ACCESS_KEY"),
+    AWS_REGION,
+    BUCKET_NAME
+]):
+    raise RuntimeError("Missing one or more AWS S3 configuration values — check your .env file")
+
+
 s3_client = boto3.client(
      "s3",
      region_name = AWS_REGION,
@@ -39,7 +48,7 @@ async def send_emergency_alert(user_id: int, request: Request, db: Session = Dep
                    photo.file,
                    BUCKET_NAME,
                    filename,
-                   ExtraArgs={"ContentType": photo.content_type,"ACL":"public-read"}
+                   ExtraArgs={"ContentType": photo.content_type}
               )
               image_url = f"https://{BUCKET_NAME}.s3.{AWS_REGION}.amazonaws.com/{filename}"
 
