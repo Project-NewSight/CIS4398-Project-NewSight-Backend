@@ -1,19 +1,25 @@
 from fastapi import APIRouter, Depends, HTTPException, Form, UploadFile, File, Request
 import os 
-import threading
 from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import EmergencyContact
 from app.services.sms_service import send_sms
 from datetime import datetime
+import boto3
+from dotenv import load_dotenv
 
+load_dotenv()
 
-def delete_photo_delay(path,delay=300):
-     def _delete():
-          if os.path.exists(path):
-               os.remove(path)
-               print(f"Deleted photo {path}")
-     threading.Timer(delay,_delete).start()
+AWS_REGION = os.getenv("AWS_REGION")
+BUCKET_NAME = os.getenv("AWS_S3_BUCKET_NAME")
+
+s3_client = boto3.client(
+     "s3",
+     region_name = AWS_REGION,
+     aws_access_key_id = os.getenv("AWS_ACCESS_KEY_ID"),
+     aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+
+)
 
 router = APIRouter(prefix="/emergency_alert", tags=["emergency_alert"])
 
@@ -25,22 +31,21 @@ async def send_emergency_alert(user_id: int, request: Request, db: Session = Dep
         raise HTTPException(status_code=404, detail="No emergency contacts found for this user")
     
     image_url = None
+
     if photo:
-        temp_dir = "temp_photos"
-        os.makedirs(temp_dir,exist_ok=True)
-        filename = f"temp_{datetime.now().strftime('%H%M%S')}_{photo.filename}"
-        temp_path = os.path.join(temp_dir,filename)
+         try:
+              filename = f"user_{user_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{photo.filename}"
+              s3_client.upload_fileobj(
+                   photo.file,
+                   BUCKET_NAME,
+                   filename,
+                   ExtraArgs={"ContentType": photo.content_type,"ACL":"public-read"}
+              )
+              image_url = f"https://{BUCKET_NAME}.s3.{AWS_REGION}.amazonaws.com/{filename}"
 
-        with open(temp_path,"wb") as f:
-            f.write(await photo.read())
-
-        
-        base_url = str(request.base_url).rstrip("/")
-        #if "127.0.0.1" in base_url or "localhost" in base_url:
-         #   base_url = "https://ourapidomain.com"  # replace with your backend URL
-
-        image_url = f"{base_url}/temp_photos/{filename}"
-
+         except Exception as e:
+              raise HTTPException(status_code=500, detail=f"Error uploading photo: {str(e)}")
+              
     
     alert_message = (
         "This is an automated message from Project NewSight.\n" \
@@ -59,8 +64,5 @@ async def send_emergency_alert(user_id: int, request: Request, db: Session = Dep
         "status": sms_result.get("status"),
         "error": sms_result.get("error")
         })
-
-    if photo and os.path.exists(temp_path):
-            delete_photo_delay(temp_path,delay=300)
 
     return{"message": "Alert sent to your emergency contact", "results":results, "photo_included": bool(photo), "image_url":image_url}
