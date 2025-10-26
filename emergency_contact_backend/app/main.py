@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 from app.routes import sms_routes
 from app.routes import contacts
 from app.routes import emergency_alert
+from app.routes import contacts
 
 app = FastAPI(title="Emergency Contact API", version="1.0")
 
@@ -15,6 +16,7 @@ app.mount("/temp_photos", StaticFiles(directory="temp_photos"), name="temp_photo
 app.include_router(sms_routes.router)
 app.include_router(contacts.router)
 app.include_router(emergency_alert.router)
+app.include_router(contacts.router)
 
 @app.get("/")
 def root():
