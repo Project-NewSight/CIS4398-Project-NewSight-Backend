@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/DeepFaceTest.iml" filepath="$PROJECT_DIR$/.idea/DeepFaceTest.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/CIS4398-Project-NewSight-Backend.iml" filepath="$PROJECT_DIR$/.idea/CIS4398-Project-NewSight-Backend.iml" />
     </modules>
   </component>
 </project>

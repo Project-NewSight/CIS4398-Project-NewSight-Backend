@@ -144,13 +144,21 @@ WS_MIN_INTERVAL_MS = 250
 @app.websocket("/ws/verify")
 async def ws_verify(websocket: WebSocket):
     await websocket.accept()
+    print("[WS] connected to", websocket.url.path)
     last_ts = 0.0
 
 
-    if not os.listdir(CACHE_DIR):
-        sync_s3_faces_to_local()
 
     try:
+        if not os.listdir(CACHE_DIR):
+            try:
+                sync_s3_faces_to_local()
+                print("[WS] S3 sync complete")
+            except Exception as e:
+                print(f"[WS] S3 sync failed: {e}")
+
+
+
         while True:
             message = await websocket.receive()
 
@@ -158,7 +166,7 @@ async def ws_verify(websocket: WebSocket):
             if "text" in message and message["text"] is not None:
                 if message["text"] == "ping":
                     await websocket.send_text("pong")
-                # silently ignore other text to keep behavior minimal
+
                 continue
 
 
