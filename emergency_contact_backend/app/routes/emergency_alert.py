@@ -61,7 +61,7 @@ async def send_emergency_alert(user_id: int, request: Request, db: Session = Dep
               
     
     alert_message = (
-        "This is an automated message from Project NewSight.\n" \
+        "This is an automated message from NewSight.\n" \
         "User may need assistance.\n" \
         f"Last known location: https://maps.google.com/?q={latitude},{longitude}\n"
     )
