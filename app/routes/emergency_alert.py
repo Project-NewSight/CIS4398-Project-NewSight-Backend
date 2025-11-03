@@ -8,7 +8,9 @@ from datetime import datetime
 import boto3
 from dotenv import load_dotenv
 
-load_dotenv()
+# Load .env file from project root (parent of app directory)
+env_path = os.path.join(os.path.dirname(__file__), "..", "..", ".env")
+load_dotenv(dotenv_path=env_path, override=True)
 
 AWS_REGION = os.getenv("AWS_REGION")
 BUCKET_NAME = os.getenv("AWS_S3_BUCKET_NAME")
