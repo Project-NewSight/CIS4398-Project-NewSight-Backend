@@ -103,6 +103,8 @@ emulator-5554	device
 
 3. Run the following command to link your Mac’s backend to your phone:adb -s <device_serial> reverse tcp:8000 tcp:8000
 
+For veetor only: adb -s 2S98115AA11A2500505 reverse tcp:8000 tcp:8000
+
 Verify with: adb -s 2S98115AA11A2500505 reverse --list
 
 4(optional). If you want to undo the port forwarding when finished: adb -s <device_serial> reverse --remove tcp:8000
