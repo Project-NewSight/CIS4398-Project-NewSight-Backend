@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NewSight Navigation</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🧭 NewSight Navigation</h1>
+            <p class="subtitle">Voice-Activated Walking Directions</p>
+        </header>
+
+        <!-- Status Bar -->
+        <div class="status-bar">
+            <div class="status-item">
+                <span class="status-label">Camera:</span>
+                <span id="cameraStatus" class="status-value">🔴 Off</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">GPS:</span>
+                <span id="gpsStatus" class="status-value">🔴 Off</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Backend:</span>
+                <span id="backendStatus" class="status-value">🔴 Disconnected</span>
+            </div>
+        </div>
+
+        <!-- Video Feed Section -->
+        <div class="video-section">
+            <div class="video-container">
+                <video id="videoFeed" autoplay playsinline></video>
+                <div class="video-overlay" id="videoOverlay">
+                    <div class="overlay-text">Camera Starting...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Control Section -->
+        <div class="control-section">
+            
+            <!-- Voice Request -->
+            <div class="card">
+                <h3>🎤 Voice Navigation Request</h3>
+                <button id="voiceBtn" class="btn btn-primary btn-large">
+                    <span class="btn-icon">🎤</span>
+                    <span id="voiceBtnText">Start Voice Request</span>
+                </button>
+                <div class="transcript-box">
+                    <label>Your Request:</label>
+                    <div id="transcript" class="transcript-text empty">
+                        Click button and say: "Give me directions to [place]"
+                    </div>
+                </div>
+            </div>
+
+            <!-- Navigation Status -->
+            <div class="card" id="navigationCard" style="display: none;">
+                <h3>🗺️ Navigation Active</h3>
+                <div class="nav-info">
+                    <div class="nav-destination">
+                        <strong>Destination:</strong>
+                        <span id="navDestination"></span>
+                    </div>
+                    <div class="nav-summary">
+                        <div class="nav-stat">
+                            <span class="nav-label">Distance:</span>
+                            <span id="navDistance" class="nav-value">-</span>
+                        </div>
+                        <div class="nav-stat">
+                            <span class="nav-label">Duration:</span>
+                            <span id="navDuration" class="nav-value">-</span>
+                        </div>
+                        <div class="nav-stat">
+                            <span class="nav-label">Steps:</span>
+                            <span id="navSteps" class="nav-value">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Current Instruction -->
+                <div class="current-instruction">
+                    <div class="instruction-label">Current Step (<span id="currentStepNum">1</span>/<span id="totalSteps">0</span>):</div>
+                    <div id="currentInstruction" class="instruction-text">
+                        Starting navigation...
+                    </div>
+                    <div class="instruction-details">
+                        <span id="stepDistance">-</span> • <span id="stepDuration">-</span>
+                    </div>
+                </div>
+
+                <!-- Navigation Controls -->
+                <div class="nav-controls">
+                    <button id="prevStepBtn" class="btn btn-secondary">⏮ Previous</button>
+                    <button id="nextStepBtn" class="btn btn-secondary">Next ⏭</button>
+                    <button id="stopNavBtn" class="btn btn-danger">Stop Navigation</button>
+                </div>
+
+                <!-- All Steps List -->
+                <div class="steps-container">
+                    <h4>All Steps:</h4>
+                    <div id="stepsList" class="steps-list"></div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Loading Indicator -->
+        <div class="loading-overlay" id="loadingOverlay" style="display: none;">
+            <div class="loading-spinner"></div>
+            <div class="loading-text" id="loadingText">Processing...</div>
+        </div>
+
+        <!-- Error/Success Messages -->
+        <div id="messageContainer"></div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
