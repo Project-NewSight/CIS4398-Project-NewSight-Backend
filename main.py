@@ -20,13 +20,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-S3_BUCKET = os.getenv("S3_BUCKET", "newsight-storage")
+S3_BUCKET = os.getenv("AWS_S3_BUCKET_NAME", "newsight-storage")
 S3_PREFIX = os.getenv("S3_PREFIX", "familiar_img/")
-AWS_REGION = os.getenv("AWS_DEFAULT_REGION", "us-east-2")
+AWS_REGION = os.getenv("AWS_REGION", "us-east-2")
 
 
 DISTANCE_THRESHOLDS = {
-    "VGG-Face": 0.6,
+    "VGG-Face": 0.67,
     "Facenet": 10,
     "Facenet512": 10,
     "ArcFace": 4.15,
