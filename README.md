@@ -35,7 +35,6 @@ The system ensures that in an emergency, user data is safely transmitted, messag
 ### Shared Infrastructure
 - Clean, modular structure for easy integration with the Project NewSight mobile frontend
 - CORS middleware enabled for cross-origin requests
-- Static file serving for temporary photos
 - Unified API documentation via FastAPI's automatic docs
 
 ---
@@ -175,10 +174,6 @@ uvicorn app.main:app --reload
   "note": "match_status"
 }
 ```
-
-### Static Files
-
-- `/temp_photos/` - Static file serving for temporary photos
 
 ---
 

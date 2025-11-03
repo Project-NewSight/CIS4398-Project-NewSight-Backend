@@ -13,7 +13,9 @@ import time
 import asyncio
 from dotenv import load_dotenv
 
-load_dotenv()
+# Load .env file from project root (parent of app directory)
+env_path = os.path.join(os.path.dirname(__file__), "..", "..", ".env")
+load_dotenv(dotenv_path=env_path, override=True)
 
 router = APIRouter(tags=["familiar_face"])  # No prefix to maintain original paths
 

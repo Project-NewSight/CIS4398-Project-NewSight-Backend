@@ -3,7 +3,9 @@ import vonage
 from dotenv import load_dotenv
 import os
 
-load_dotenv()
+# Load .env file from project root (parent of app directory)
+env_path = os.path.join(os.path.dirname(__file__), "..", "..", ".env")
+load_dotenv(dotenv_path=env_path, override=True)
 VONAGE_API_KEY = os.getenv("VONAGE_API_KEY") #API keys for vonage free sms service
 VONAGE_API_SECRET = os.getenv("VONAGE_API_SECRET")
 

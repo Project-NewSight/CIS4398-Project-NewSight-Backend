@@ -2,8 +2,8 @@
 # Combines Emergency Contact and Familiar Face Detection features
 import os
 from fastapi import FastAPI, WebSocket
-from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+# from fastapi.staticfiles import StaticFiles  # Commented out - not currently used (photos go directly to S3)
 from app.routes import sms_routes
 from app.routes import contacts
 from app.routes import emergency_alert
@@ -24,8 +24,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount static files for temporary photos
-app.mount("/temp_photos", StaticFiles(directory="temp_photos"), name="temp_photos")
+# Mount static files for temporary photos (commented out - not currently used)
+# Photos are uploaded directly to S3 and served via S3 URLs, so this mount is not needed
+# app.mount("/temp_photos", StaticFiles(directory="temp_photos"), name="temp_photos")
 
 # Include routers for both features
 # Emergency Contact Feature Routes
