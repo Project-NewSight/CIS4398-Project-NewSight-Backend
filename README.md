@@ -1,0 +1,127 @@
+Project NewSight – Emergency Contact Backend
+
+This backend service powers the **Emergency Contact and Alert system** for *Project NewSight*.  
+It allows users to register trusted contacts, and during emergencies, automatically send their **location**, **photo**, and **alert message** to those contacts via SMS.
+
+Overview
+
+The backend is built with **FastAPI** and integrates with:
+- **AWS S3** – for securely storing temporary emergency photos.
+- **PostgreSQL (via SQLAlchemy)** – for managing user contact data.
+- **Vonage SMS API** – for sending alerts to trusted contacts.
+
+The system ensures that in an emergency, user data is safely transmitted, messages are delivered quickly, and photos are uploaded to a secure, temporary cloud location.
+
+---
+
+Features
+
+- Add, view, or delete trusted emergency contacts.
+- Automatically send an alert (GPS + photo + message) to all trusted contacts for a user.
+- Store uploaded emergency photos in **AWS S3**.
+- Clean, modular structure for easy integration with the Project NewSight mobile frontend.
+
+---
+
+Project Structure
+
+emergency_contact_backend/
+│
+├── app/
+│ ├── db.py # Database connection and session
+│ ├── models.py # SQLAlchemy models (EmergencyContact)
+│ ├── main.py # FastAPI entry point
+│ ├── routes/
+│ │ ├── emergency_alert.py # Endpoint for sending alerts
+│ │ └── contacts.py # CRUD endpoints for emergency contacts
+│ ├── services/
+│ │ └── sms_service.py # Handles Vonage SMS integration
+│ └── init.py
+│
+├── .env # Environment variables (not committed)
+├── requirements.txt # Dependencies
+└── README.md # Project documentation
+
+---
+Create and activate virtual environemnt
+
+python -m venv venv
+source venv/bin/activate   # Mac/Linux
+venv\Scripts\activate      # Windows
+
+---
+Install Dependencies
+
+pip install -r requirements.txt
+
+---
+Create .env in root directory with: 
+DATABASE_URL=postgresql+psycopg2://username:password@host:port/dbname
+
+# AWS S3 Configuration
+AWS_ACCESS_KEY_ID=your-access-key
+AWS_SECRET_ACCESS_KEY=your-secret-key
+AWS_REGION=us-east-2
+AWS_S3_BUCKET_NAME=newsight-alert-photos
+AWS_S3_FOLDER_NAME=emergency-uploads
+
+# Vonage (SMS) Configuration
+VONAGE_API_KEY=your-vonage-key
+VONAGE_API_SECRET=your-vonage-secret
+VONAGE_FROM_NUMBER=your-vonage-phone
+---
+
+Running the server for API
+
+Command: uvicorn app.main:app --reload
+
+server will run at: http://127.0.0.1:8000
+
+Test endpoint: http://127.0.0.1:8000/docs
+
+-----------
+Addition Instructions 
+
+These instruction are relevant only if:
+    You are using a Apple Silcon Mac
+    You are testing with a physical Android phone connected via usb to the mac in Android Studio
+
+1. Check if ADB is installed:ls ~/Library/Android/sdk/platform-tools
+
+f adb exists, temporarily add it to your PATH: export PATH=$PATH:$HOME/Library/Android/sdk/platform-tools
+
+Then confirm installation: adb version
+
+2. Connect your Android device via USB
+Plug the device into your Mac and run: adb devices
+
+Ex output: 
+
+List of devices attached
+2S98115AA11A2500505	device
+emulator-5554	device
+
+3. Run the following command to link your Mac’s backend to your phone:adb -s <device_serial> reverse tcp:8000 tcp:8000
+
+For veetor only: adb -s 2S98115AA11A2500505 reverse tcp:8000 tcp:8000
+
+Verify with: adb -s 2S98115AA11A2500505 reverse --list
+
+4(optional). If you want to undo the port forwarding when finished: adb -s <device_serial> reverse --remove tcp:8000
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
