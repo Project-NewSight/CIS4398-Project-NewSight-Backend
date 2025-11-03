@@ -24,6 +24,20 @@ S3_BUCKET = os.getenv("S3_BUCKET", "newsight-storage")
 S3_PREFIX = os.getenv("S3_PREFIX", "familiar_img/")
 AWS_REGION = os.getenv("AWS_DEFAULT_REGION", "us-east-2")
 
+
+DISTANCE_THRESHOLDS = {
+    "VGG-Face": 0.6,
+    "Facenet": 10,
+    "Facenet512": 10,
+    "ArcFace": 4.15,
+    "Dlib": 0.6,
+    "SFace": 0.593
+}
+
+MODEL_NAME = "VGG-Face"
+DETECTOR_BACKEND = "retinaface"
+DISTANCE_THRESHOLD = DISTANCE_THRESHOLDS.get(MODEL_NAME, 0.4)
+
 s3 = boto3.client(
     "s3",
     region_name=AWS_REGION,
@@ -49,12 +63,12 @@ def sync_s3_faces_to_local():
         s3.download_file(S3_BUCKET, key, local_path)
         local_files.append(local_path)
 
+    print(f"[S3] Synced {len(local_files)} faces to cache")
     return local_files
 
 
-
-
 WS_MIN_INTERVAL_MS = 250
+
 
 @app.websocket("/ws")
 @app.websocket("/ws/verify")
@@ -75,13 +89,11 @@ async def ws_verify(websocket: WebSocket):
         while True:
             message = await websocket.receive()
 
-
             if "text" in message and message["text"] is not None:
                 txt = message["text"]
                 if txt == "ping":
                     await websocket.send_text("pong")
                     continue
-
 
                 try:
                     data = json.loads(txt)
@@ -89,52 +101,22 @@ async def ws_verify(websocket: WebSocket):
 
                     if msg_type == "hello":
                         current_feature = data.get("feature")
-                        await websocket.send_text(json.dumps({"ok": True, "note": "hello_ack", "feature": current_feature}))
+                        await websocket.send_text(
+                            json.dumps({"ok": True, "note": "hello_ack", "feature": current_feature}))
                         continue
-
 
                     if msg_type == "frame" and "image_b64" in data:
                         jpeg_bytes = base64.b64decode(data.get("image_b64") or "")
                         await websocket.send_text(json.dumps({"ok": True, "note": "received", "len": len(jpeg_bytes)}))
 
-
-                        loop = asyncio.get_running_loop()
-                        if not os.listdir(CACHE_DIR):
-                            try:
-                                sync_s3_faces_to_local()
-                                print(f"[WS] cache synced; files: {len(os.listdir(CACHE_DIR))}")
-                            except Exception as e:
-                                print(f"[WS] S3 sync failed: {e}")
-                                await websocket.send_text(
-                                    json.dumps({"ok": True, "match": False, "note": "no_gallery_in_cache"}))
-                                continue
-                        result = await loop.run_in_executor(
-                            None,
-                            lambda: DeepFace.find(
-                                img_path=cv2.imdecode(np.frombuffer(jpeg_bytes, np.uint8), cv2.IMREAD_COLOR),
-                                db_path=CACHE_DIR,
-                                model_name="ArcFace",
-                                detector_backend="retinaface",
-                                enforce_detection=False
-                            )
-                        )
-
-                        if not result or len(result[0]) == 0:
-                            await websocket.send_text(json.dumps({"ok": True, "match": False, "contactName": None, "confidence": 0.0}))
-                        else:
-                            top = result[0].iloc[0]
-                            distance_col = next((c for c in result[0].columns if "distance" in c.lower() or "cosine" in c.lower() or "euclidean" in c.lower()), None)
-                            distance = float(top[distance_col]) if distance_col else None
-                            identity = os.path.basename(str(top.get("identity", "")))
-                            name_stem, _ext = os.path.splitext(identity)
-                            confidence = max(0.0, min(1.0, 1.0 - distance)) if distance is not None else 0.0
-                            await websocket.send_text(json.dumps({"ok": True, "match": True, "contactName": name_stem, "confidence": confidence}))
+                        # ✅ CHANGED: Call extracted function instead of inline processing
+                        await process_face_recognition(jpeg_bytes, websocket)
                         continue
 
-                except Exception:
+                except Exception as e:
+                    print(f"[WS] Error parsing text message: {e}")
                     pass
                 continue
-
 
             if "bytes" not in message or message["bytes"] is None:
                 continue
@@ -146,70 +128,118 @@ async def ws_verify(websocket: WebSocket):
 
             jpeg_bytes = message["bytes"]
 
-            npbuf = np.frombuffer(jpeg_bytes, dtype=np.uint8)
-            img = cv2.imdecode(npbuf, cv2.IMREAD_COLOR)
-            if img is None:
-                await websocket.send_text(json.dumps({"ok": False, "error": "decode_failed"}))
-                continue
-
-
-            await websocket.send_text(json.dumps({"ok": True, "note": "received", "len": len(jpeg_bytes)}))
-
-
-            loop = asyncio.get_running_loop()
-            if not os.listdir(CACHE_DIR):
-                try:
-                    sync_s3_faces_to_local()
-                    print(f"[WS] cache synced; files: {len(os.listdir(CACHE_DIR))}")
-                except Exception as e:
-                    print(f"[WS] S3 sync failed: {e}")
-                    await websocket.send_text(json.dumps({"ok": True, "match": False, "note": "no_gallery_in_cache"}))
-                    continue
-            result = await loop.run_in_executor(
-                None,
-                lambda: DeepFace.find(
-                    img_path=img,
-                    db_path=CACHE_DIR,
-                    model_name="ArcFace",
-                    detector_backend="retinaface",
-                    enforce_detection=False
-                )
-            )
-
-            if not result or len(result[0]) == 0:
-                await websocket.send_text(json.dumps({
-                    "ok": True, "match": False,
-                    "contactName": None, "confidence": 0.0
-                }))
-                continue
-
-            top = result[0].iloc[0]
-            distance_col = next(
-                (c for c in result[0].columns
-                 if "distance" in c.lower() or "cosine" in c.lower()
-                 or "euclidean" in c.lower()),
-                None
-            )
-            distance = float(top[distance_col]) if distance_col else None
-
-            identity = os.path.basename(str(top.get("identity", "")))
-            name_stem, _ext = os.path.splitext(identity)
-
-            confidence = max(0.0, min(1.0, 1.0 - distance)) if distance is not None else 0.0
-
-            await websocket.send_text(json.dumps({
-                "ok": True,
-                "match": True,
-                "contactName": name_stem,
-                "confidence": confidence
-            }))
+            await process_face_recognition(jpeg_bytes, websocket)
 
     except WebSocketDisconnect:
-        pass
+        print("[WS] Client disconnected")
     except Exception as e:
+        print(f"[WS] Error: {e}")
         try:
             await websocket.send_text(json.dumps({
                 "ok": False, "error": f"server_exception: {e}"
             }))
         except Exception:
             pass
+
+
+
+async def process_face_recognition(jpeg_bytes: bytes, websocket: WebSocket):
+
+    try:
+
+        npbuf = np.frombuffer(jpeg_bytes, dtype=np.uint8)
+        img = cv2.imdecode(npbuf, cv2.IMREAD_COLOR)
+        if img is None:
+            await websocket.send_text(json.dumps({
+                "ok": False,
+                "error": "decode_failed"
+            }))
+            return
+
+
+        if not os.listdir(CACHE_DIR):
+            await websocket.send_text(json.dumps({
+                "ok": True,
+                "match": False,
+                "note": "no_gallery_in_cache"
+            }))
+            return
+
+
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(
+            None,
+            lambda: DeepFace.find(
+                img_path=img,
+                db_path=CACHE_DIR,
+                model_name=MODEL_NAME,
+                detector_backend=DETECTOR_BACKEND,
+                enforce_detection=False,
+                silent=True
+            )
+        )
+
+
+        if not result or len(result[0]) == 0:
+            await websocket.send_text(json.dumps({
+                "ok": True,
+                "match": False,
+                "contactName": "Unknown",
+                "confidence": 0.0,
+                "note": "no_face_detected"
+            }))
+            return
+
+
+        top = result[0].iloc[0]
+
+
+        distance_col = next(
+            (c for c in result[0].columns
+             if "distance" in c.lower() or "cosine" in c.lower()
+             or "euclidean" in c.lower()),
+            None
+        )
+
+        if distance_col is None:
+            await websocket.send_text(json.dumps({
+                "ok": False,
+                "error": "no_distance_column"
+            }))
+            return
+
+        distance = float(top[distance_col])
+        identity = os.path.basename(str(top.get("identity", "")))
+        name_stem, _ext = os.path.splitext(identity)
+
+
+        if distance > DISTANCE_THRESHOLD:
+            print(f"[FACE] Rejected: {name_stem} (distance={distance:.4f}, threshold={DISTANCE_THRESHOLD})")
+            await websocket.send_text(json.dumps({
+                "ok": True,
+                "match": False,
+                "contactName": "Unknown",
+                "confidence": 0.0,
+                "distance": round(distance, 4),
+                "note": "below_threshold"
+            }))
+            return
+
+
+        confidence = max(0.0, min(1.0, 1.0 - distance))
+        print(f"[FACE] Match: {name_stem} (distance={distance:.4f}, confidence={confidence:.4f})")
+
+        await websocket.send_text(json.dumps({
+            "ok": True,
+            "match": True,
+            "contactName": name_stem,
+            "confidence": round(confidence, 4),
+            "distance": round(distance, 4)
+        }))
+
+    except Exception as e:
+        print(f"[FACE] Error processing frame: {e}")
+        await websocket.send_text(json.dumps({
+            "ok": False,
+            "error": str(e)
+        }))
