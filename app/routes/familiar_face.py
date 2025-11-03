@@ -1,29 +1,25 @@
+# Familiar Face Detection Router and Services
 from deepface import DeepFace
-from fastapi import FastAPI, UploadFile, File, HTTPException
-import numpy as np, cv2, os, io, base64, boto3, tempfile, json, time
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException
+import numpy as np
+import cv2
+import os
+import io
+import base64
+import boto3
+import tempfile
+import json
+import time
 import asyncio
-from fastapi.middleware.cors import CORSMiddleware
-from gtts import gTTS
 from dotenv import load_dotenv
-from fastapi import WebSocket, WebSocketDisconnect
 
-env_path = os.path.join(os.path.dirname(__file__), ".env")
-load_dotenv(dotenv_path=env_path, override=True)
+load_dotenv()
 
-app = FastAPI()
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+router = APIRouter(tags=["familiar_face"])  # No prefix to maintain original paths
 
 S3_BUCKET = os.getenv("AWS_S3_BUCKET_NAME", "newsight-storage")
 S3_PREFIX = os.getenv("S3_PREFIX", "familiar_img/")
 AWS_REGION = os.getenv("AWS_REGION", "us-east-2")
-
 
 DISTANCE_THRESHOLDS = {
     "VGG-Face": 0.67,
@@ -48,6 +44,8 @@ s3 = boto3.client(
 CACHE_DIR = os.path.join(tempfile.gettempdir(), "familiar_faces_cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
 
+WS_MIN_INTERVAL_MS = 250
+
 
 def sync_s3_faces_to_local():
     objs = s3.list_objects_v2(Bucket=S3_BUCKET, Prefix=S3_PREFIX)
@@ -67,11 +65,7 @@ def sync_s3_faces_to_local():
     return local_files
 
 
-WS_MIN_INTERVAL_MS = 250
-
-
-@app.websocket("/ws")
-@app.websocket("/ws/verify")
+# WebSocket endpoints - registered directly in app/main.py to maintain original paths
 async def ws_verify(websocket: WebSocket):
     await websocket.accept()
     print("[WS] connected to", websocket.url.path)
@@ -109,7 +103,6 @@ async def ws_verify(websocket: WebSocket):
                         jpeg_bytes = base64.b64decode(data.get("image_b64") or "")
                         await websocket.send_text(json.dumps({"ok": True, "note": "received", "len": len(jpeg_bytes)}))
 
-                        # ✅ CHANGED: Call extracted function instead of inline processing
                         await process_face_recognition(jpeg_bytes, websocket)
                         continue
 
@@ -142,7 +135,6 @@ async def ws_verify(websocket: WebSocket):
             pass
 
 
-
 async def process_face_recognition(jpeg_bytes: bytes, websocket: WebSocket):
 
     try:
@@ -156,7 +148,6 @@ async def process_face_recognition(jpeg_bytes: bytes, websocket: WebSocket):
             }))
             return
 
-
         if not os.listdir(CACHE_DIR):
             await websocket.send_text(json.dumps({
                 "ok": True,
@@ -164,7 +155,6 @@ async def process_face_recognition(jpeg_bytes: bytes, websocket: WebSocket):
                 "note": "no_gallery_in_cache"
             }))
             return
-
 
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(
@@ -179,7 +169,6 @@ async def process_face_recognition(jpeg_bytes: bytes, websocket: WebSocket):
             )
         )
 
-
         if not result or len(result[0]) == 0:
             await websocket.send_text(json.dumps({
                 "ok": True,
@@ -190,9 +179,7 @@ async def process_face_recognition(jpeg_bytes: bytes, websocket: WebSocket):
             }))
             return
 
-
         top = result[0].iloc[0]
-
 
         distance_col = next(
             (c for c in result[0].columns
@@ -212,7 +199,6 @@ async def process_face_recognition(jpeg_bytes: bytes, websocket: WebSocket):
         identity = os.path.basename(str(top.get("identity", "")))
         name_stem, _ext = os.path.splitext(identity)
 
-
         if distance > DISTANCE_THRESHOLD:
             print(f"[FACE] Rejected: {name_stem} (distance={distance:.4f}, threshold={DISTANCE_THRESHOLD})")
             await websocket.send_text(json.dumps({
@@ -224,7 +210,6 @@ async def process_face_recognition(jpeg_bytes: bytes, websocket: WebSocket):
                 "note": "below_threshold"
             }))
             return
-
 
         confidence = max(0.0, min(1.0, 1.0 - distance))
         print(f"[FACE] Match: {name_stem} (distance={distance:.4f}, confidence={confidence:.4f})")
@@ -243,3 +228,4 @@ async def process_face_recognition(jpeg_bytes: bytes, websocket: WebSocket):
             "ok": False,
             "error": str(e)
         }))
+
