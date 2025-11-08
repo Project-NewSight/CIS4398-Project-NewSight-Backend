@@ -1,35 +1,24 @@
 /**
- * NewSight Navigation - Frontend Application
- * Voice-activated walking navigation with real-time guidance
+ * NewSight Navigation - HUD Interface
+ * Car-style heads-up display with voice control
  */
 
 // ==================== Configuration ====================
 const API_BASE_URL = 'http://localhost:8000';
-const ANNOUNCEMENT_DISTANCE = 20; // meters - when to announce next instruction
-const LOCATION_UPDATE_INTERVAL = 3000; // ms - how often to update location
+const ANNOUNCEMENT_DISTANCE = 20; // meters
+const LOCATION_UPDATE_INTERVAL = 3000; // ms
 
 // ==================== Global State ====================
 const state = {
-    camera: {
-        active: false,
-        stream: null
-    },
-    gps: {
-        active: false,
-        watchId: null,
-        currentPosition: null
-    },
-    backend: {
-        connected: false
-    },
+    camera: { active: false, stream: null },
+    gps: { active: false, watchId: null, currentPosition: null },
+    backend: { connected: false },
     navigation: {
         active: false,
         currentStepIndex: 0,
         steps: [],
         destination: '',
-        totalDistance: '',
-        totalDuration: '',
-        announced: new Set() // Track which steps have been announced
+        announced: new Set()
     },
     speech: {
         recognition: null,
@@ -40,47 +29,47 @@ const state = {
 
 // ==================== DOM Elements ====================
 const elements = {
-    // Status indicators
-    cameraStatus: document.getElementById('cameraStatus'),
-    gpsStatus: document.getElementById('gpsStatus'),
-    backendStatus: document.getElementById('backendStatus'),
-    
-    // Video
+    // Camera
     videoFeed: document.getElementById('videoFeed'),
-    videoOverlay: document.getElementById('videoOverlay'),
+    cameraLoading: document.getElementById('cameraLoading'),
     
-    // Voice control
+    // Status
+    cameraStatusDot: document.getElementById('cameraStatusDot'),
+    gpsStatusDot: document.getElementById('gpsStatusDot'),
+    backendStatusDot: document.getElementById('backendStatusDot'),
+    
+    // Voice
+    voiceButtonContainer: document.getElementById('voiceButtonContainer'),
     voiceBtn: document.getElementById('voiceBtn'),
-    voiceBtnText: document.getElementById('voiceBtnText'),
-    transcript: document.getElementById('transcript'),
+    voiceText: document.getElementById('voiceText'),
+    voiceTranscript: document.getElementById('voiceTranscript'),
     
-    // Navigation
-    navigationCard: document.getElementById('navigationCard'),
-    navDestination: document.getElementById('navDestination'),
-    navDistance: document.getElementById('navDistance'),
-    navDuration: document.getElementById('navDuration'),
-    navSteps: document.getElementById('navSteps'),
-    currentStepNum: document.getElementById('currentStepNum'),
-    totalSteps: document.getElementById('totalSteps'),
-    currentInstruction: document.getElementById('currentInstruction'),
-    stepDistance: document.getElementById('stepDistance'),
-    stepDuration: document.getElementById('stepDuration'),
-    stepsList: document.getElementById('stepsList'),
+    // AR Navigation Overlay
+    arNavOverlay: document.getElementById('arNavOverlay'),
+    streetName: document.getElementById('streetName'),
+    arDistance: document.getElementById('arDistance'),
+    arArrows: document.getElementById('arArrows'),
+    arrowIcon: document.getElementById('arrowIcon'),
+    arInstruction: document.getElementById('arInstruction'),
+    stepCurrent: document.getElementById('stepCurrent'),
+    stepTotal: document.getElementById('stepTotal'),
+    destTime: document.getElementById('destTime'),
+    destDistance: document.getElementById('destDistance'),
     
-    // Navigation controls
-    prevStepBtn: document.getElementById('prevStepBtn'),
-    nextStepBtn: document.getElementById('nextStepBtn'),
-    stopNavBtn: document.getElementById('stopNavBtn'),
+    // Controls
+    prevBtn: document.getElementById('prevBtn'),
+    nextBtn: document.getElementById('nextBtn'),
+    stopBtn: document.getElementById('stopBtn'),
     
-    // UI feedback
+    // Loading & Toasts
     loadingOverlay: document.getElementById('loadingOverlay'),
     loadingText: document.getElementById('loadingText'),
-    messageContainer: document.getElementById('messageContainer')
+    toastContainer: document.getElementById('toastContainer')
 };
 
 // ==================== Initialization ====================
 window.addEventListener('load', async () => {
-    console.log('🚀 NewSight Navigation initializing...');
+    console.log('🚀 NewSight Navigation HUD initializing...');
     
     await checkBackendConnection();
     await initializeCamera();
@@ -97,61 +86,53 @@ async function checkBackendConnection() {
         const response = await fetch(`${API_BASE_URL}/api/health`);
         if (response.ok) {
             state.backend.connected = true;
-            updateStatus('backend', '🟢 Connected');
-            showMessage('Backend connected successfully', 'success');
+            setStatusActive('backend');
+            showToast('Backend connected', 'success');
         }
     } catch (error) {
         state.backend.connected = false;
-        updateStatus('backend', '🔴 Disconnected');
-        showMessage('Cannot connect to backend. Please ensure server is running on port 8000', 'error');
+        showToast('Cannot connect to backend', 'error');
     }
 }
 
-// ==================== Camera Functions ====================
+// ==================== Camera ====================
 async function initializeCamera() {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({
-            video: {
-                width: { ideal: 1280 },
-                height: { ideal: 720 },
-                facingMode: 'user'
-            }
+            video: { width: { ideal: 1920 }, height: { ideal: 1080 }, facingMode: 'user' }
         });
         
         elements.videoFeed.srcObject = stream;
         state.camera.stream = stream;
         state.camera.active = true;
         
-        elements.videoOverlay.classList.add('hidden');
-        updateStatus('camera', '🟢 Active');
+        elements.cameraLoading.classList.add('hidden');
+        setStatusActive('camera');
         console.log('✅ Camera initialized');
         
     } catch (error) {
         console.error('❌ Camera error:', error);
-        updateStatus('camera', '🔴 Error');
-        showMessage('Camera access denied. Please allow camera permissions.', 'error');
+        showToast('Camera access denied', 'error');
     }
 }
 
-// ==================== GPS/Geolocation Functions ====================
+// ==================== GPS ====================
 async function initializeGPS() {
     if (!navigator.geolocation) {
-        showMessage('Geolocation not supported by this browser', 'error');
+        showToast('Geolocation not supported', 'error');
         return;
     }
     
     try {
-        // Get initial position
         const position = await getCurrentPosition();
         state.gps.currentPosition = position;
         state.gps.active = true;
-        updateStatus('gps', '🟢 Active');
+        setStatusActive('gps');
         console.log('✅ GPS initialized', position);
         
     } catch (error) {
         console.error('❌ GPS error:', error);
-        updateStatus('gps', '🔴 Error');
-        showMessage('GPS access denied. Please allow location permissions.', 'error');
+        showToast('GPS access denied', 'error');
     }
 }
 
@@ -164,11 +145,7 @@ function getCurrentPosition() {
                 accuracy: position.coords.accuracy
             }),
             (error) => reject(error),
-            {
-                enableHighAccuracy: true,
-                timeout: 10000,
-                maximumAge: 0
-            }
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
         );
     });
 }
@@ -185,15 +162,11 @@ function startLocationTracking() {
             };
             
             if (state.navigation.active) {
-                checkProximityToNextStep();
+                updateNavigationProgress();
             }
         },
         (error) => console.error('GPS tracking error:', error),
-        {
-            enableHighAccuracy: true,
-            timeout: 5000,
-            maximumAge: 0
-        }
+        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
     );
     
     console.log('📍 Location tracking started');
@@ -207,12 +180,12 @@ function stopLocationTracking() {
     }
 }
 
-// ==================== Speech Recognition (Speech-to-Text) ====================
+// ==================== Speech Recognition ====================
 function initializeSpeechRecognition() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     
     if (!SpeechRecognition) {
-        showMessage('Speech recognition not supported. Please use Chrome or Edge.', 'error');
+        showToast('Speech recognition not supported. Use Chrome or Edge.', 'error');
         return;
     }
     
@@ -224,16 +197,17 @@ function initializeSpeechRecognition() {
     recognition.onstart = () => {
         state.speech.isRecording = true;
         elements.voiceBtn.classList.add('recording');
-        elements.voiceBtnText.textContent = 'Listening... Speak Now';
+        elements.voiceText.textContent = 'Listening...';
+        elements.voiceTranscript.textContent = 'Listening...';
+        elements.voiceTranscript.classList.add('show');
     };
     
     recognition.onresult = (event) => {
         const transcript = event.results[0][0].transcript;
-        elements.transcript.textContent = transcript;
-        elements.transcript.classList.remove('empty');
+        elements.voiceTranscript.textContent = `"${transcript}"`;
         console.log('📝 Transcript:', transcript);
         
-        // Process the navigation request
+        // Process navigation request
         processNavigationRequest(transcript);
     };
     
@@ -241,17 +215,22 @@ function initializeSpeechRecognition() {
         console.error('Speech recognition error:', event.error);
         state.speech.isRecording = false;
         elements.voiceBtn.classList.remove('recording');
-        elements.voiceBtnText.textContent = 'Start Voice Request';
+        elements.voiceText.textContent = 'Tap to Speak';
+        elements.voiceTranscript.classList.remove('show');
         
         if (event.error === 'not-allowed') {
-            showMessage('Microphone access denied', 'error');
+            showToast('Microphone access denied', 'error');
         }
     };
     
     recognition.onend = () => {
         state.speech.isRecording = false;
         elements.voiceBtn.classList.remove('recording');
-        elements.voiceBtnText.textContent = 'Start Voice Request';
+        elements.voiceText.textContent = 'Tap to Speak';
+        
+        setTimeout(() => {
+            elements.voiceTranscript.classList.remove('show');
+        }, 2000);
     };
     
     state.speech.recognition = recognition;
@@ -260,7 +239,7 @@ function initializeSpeechRecognition() {
 
 function startVoiceRecording() {
     if (!state.speech.recognition) {
-        showMessage('Speech recognition not available', 'error');
+        showToast('Speech recognition not available', 'error');
         return;
     }
     
@@ -277,12 +256,8 @@ function startVoiceRecording() {
 
 // ==================== Text-to-Speech ====================
 function speak(text) {
-    if (!state.speech.synthesis) {
-        console.error('Speech synthesis not available');
-        return;
-    }
+    if (!state.speech.synthesis) return;
     
-    // Cancel any ongoing speech
     state.speech.synthesis.cancel();
     
     const utterance = new SpeechSynthesisUtterance(text);
@@ -290,7 +265,6 @@ function speak(text) {
     utterance.pitch = 1.0;
     utterance.volume = 1.0;
     
-    // Use a clear voice if available
     const voices = state.speech.synthesis.getVoices();
     const preferredVoice = voices.find(voice => 
         voice.lang.startsWith('en') && voice.name.includes('Female')
@@ -304,12 +278,12 @@ function speak(text) {
     console.log('🔊 Speaking:', text);
 }
 
-// ==================== Navigation API Calls ====================
+// ==================== Navigation Processing ====================
 async function processNavigationRequest(requestText) {
     showLoading('Processing your request...');
     
     try {
-        // First, extract destination from request
+        // Extract destination
         const response = await fetch(`${API_BASE_URL}/api/navigation/process-request`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -323,20 +297,20 @@ async function processNavigationRequest(requestText) {
         }
         
         const destination = data.extracted_destination;
-        showMessage(`Understood: Directions to ${destination}`, 'info');
+        showToast(`Finding: ${destination}`, 'info');
         
-        // Get current GPS location
+        // Get current location
         if (!state.gps.currentPosition) {
             const position = await getCurrentPosition();
             state.gps.currentPosition = position;
         }
         
-        // Get directions from Google Maps
+        // Get directions
         await getDirections(destination);
         
     } catch (error) {
         console.error('Error processing request:', error);
-        showMessage(error.message || 'Failed to process navigation request', 'error');
+        showToast(error.message || 'Failed to process navigation request', 'error');
         speak('Sorry, I could not process your request.');
     } finally {
         hideLoading();
@@ -362,12 +336,12 @@ async function getDirections(destination) {
             throw new Error(data.message || 'Failed to get directions');
         }
         
-        // Start navigation with the route
+        // Start navigation
         startNavigation(data);
         
     } catch (error) {
         console.error('Error getting directions:', error);
-        showMessage(error.message || 'Failed to get directions. Please check your Google Maps API key.', 'error');
+        showToast(error.message || 'Failed to get directions', 'error');
         speak('Sorry, I could not find directions to that location.');
     } finally {
         hideLoading();
@@ -380,20 +354,16 @@ function startNavigation(routeData) {
     state.navigation.currentStepIndex = 0;
     state.navigation.steps = routeData.steps;
     state.navigation.destination = routeData.destination;
-    state.navigation.totalDistance = routeData.total_distance;
-    state.navigation.totalDuration = routeData.total_duration;
     state.navigation.announced = new Set();
     
-    // Update UI
-    elements.navigationCard.style.display = 'block';
-    elements.navDestination.textContent = routeData.destination;
-    elements.navDistance.textContent = routeData.total_distance;
-    elements.navDuration.textContent = routeData.total_duration;
-    elements.navSteps.textContent = routeData.steps.length;
-    elements.totalSteps.textContent = routeData.steps.length;
+    // Show AR overlay, hide voice button
+    elements.arNavOverlay.classList.add('show');
+    elements.voiceButtonContainer.classList.add('hidden');
     
-    // Render all steps
-    renderAllSteps();
+    // Update destination info
+    elements.stepTotal.textContent = routeData.steps.length;
+    elements.destDistance.textContent = routeData.total_distance;
+    elements.destTime.textContent = formatDuration(routeData.total_duration_seconds);
     
     // Show first step
     showCurrentStep();
@@ -402,9 +372,11 @@ function startNavigation(routeData) {
     startLocationTracking();
     
     // Announce start
-    speak(`Starting navigation to ${routeData.destination}. ${routeData.steps.length} steps total. ${routeData.steps[0].instruction}`);
+    const firstStep = routeData.steps[0];
+    const firstDistance = formatDistanceForSpeech(firstStep.distance_meters);
+    speak(`Starting navigation to ${routeData.destination}. In ${firstDistance}, ${firstStep.instruction}`);
     
-    showMessage('Navigation started!', 'success');
+    showToast('Navigation started!', 'success');
     console.log('🗺️ Navigation started', routeData);
 }
 
@@ -412,38 +384,120 @@ function showCurrentStep() {
     const step = state.navigation.steps[state.navigation.currentStepIndex];
     if (!step) return;
     
-    elements.currentStepNum.textContent = state.navigation.currentStepIndex + 1;
-    elements.currentInstruction.textContent = step.instruction;
-    elements.stepDistance.textContent = step.distance;
-    elements.stepDuration.textContent = step.duration;
+    // Update step counter
+    elements.stepCurrent.textContent = state.navigation.currentStepIndex + 1;
     
-    // Update active step in list
-    document.querySelectorAll('.step-item').forEach((el, index) => {
-        el.classList.remove('active');
-        if (index === state.navigation.currentStepIndex) {
-            el.classList.add('active');
-            el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }
-        if (index < state.navigation.currentStepIndex) {
-            el.classList.add('completed');
-        } else {
-            el.classList.remove('completed');
-        }
-    });
+    // Update AR distance - ALWAYS from Google Maps API (step.distance_meters)
+    // This ensures we show accurate, official Google Maps distances, not calculated estimates
+    elements.arDistance.textContent = formatDistance(step.distance_meters);
+    
+    // Update instruction - from Google Maps API
+    elements.arInstruction.textContent = step.instruction;
+    
+    // Extract and update street name
+    const streetName = extractStreetName(step.instruction);
+    if (streetName) {
+        elements.streetName.textContent = streetName;
+    }
+    
+    // Update arrow
+    updateArrowIcon(step.instruction);
 }
 
-function renderAllSteps() {
-    elements.stepsList.innerHTML = '';
+function extractStreetName(instruction) {
+    // Try to extract street name from instruction
+    const patterns = [
+        /onto (.+?)(?:\.|$)/i,
+        /on (.+?)(?:\.|$)/i,
+        /to (.+?)(?:\.|$)/i,
+        /toward (.+?)(?:\.|$)/i
+    ];
     
-    state.navigation.steps.forEach((step, index) => {
-        const stepDiv = document.createElement('div');
-        stepDiv.className = 'step-item';
-        stepDiv.innerHTML = `
-            <div class="step-number">Step ${index + 1}</div>
-            <div class="step-instruction">${step.instruction}</div>
-            <div class="step-details">${step.distance} • ${step.duration}</div>
-        `;
-        elements.stepsList.appendChild(stepDiv);
+    for (const pattern of patterns) {
+        const match = instruction.match(pattern);
+        if (match && match[1]) {
+            return match[1].trim();
+        }
+    }
+    
+    // If no street name found, return generic message
+    return 'Continue';
+}
+
+function formatDistance(meters) {
+    // Convert meters to feet/miles
+    const feet = meters * 3.28084;
+    
+    if (feet < 528) { // Less than 0.1 mile (528 feet)
+        return `${Math.round(feet)} ft`;
+    } else {
+        const miles = feet / 5280;
+        if (miles < 0.2) {
+            return `${Math.round(feet)} ft`;
+        } else {
+            return `${miles.toFixed(1)} mi`;
+        }
+    }
+}
+
+function formatDuration(seconds) {
+    const minutes = Math.round(seconds / 60);
+    if (minutes < 60) {
+        return `${minutes} min`;
+    } else {
+        const hours = Math.floor(minutes / 60);
+        const remainingMinutes = minutes % 60;
+        return `${hours}h ${remainingMinutes}m`;
+    }
+}
+
+function formatDistanceForSpeech(meters) {
+    // Use the EXACT same format as display to avoid confusion
+    // Convert meters to feet/miles exactly as shown on screen
+    const feet = meters * 3.28084;
+    
+    if (feet < 528) { // Less than 0.1 mile
+        return `${Math.round(feet)} feet`;
+    } else {
+        const miles = feet / 5280;
+        if (miles < 0.2) {
+            return `${Math.round(feet)} feet`;
+        } else {
+            // Say exactly what's shown on screen
+            return `${miles.toFixed(1)} miles`;
+        }
+    }
+}
+
+function updateArrowIcon(instruction) {
+    const instructionLower = instruction.toLowerCase();
+    let arrowType = 'ar-arrow-straight'; // default
+    
+    if (instructionLower.includes('turn right') || instructionLower.includes('right onto')) {
+        arrowType = 'ar-arrow-right';
+    } else if (instructionLower.includes('turn left') || instructionLower.includes('left onto')) {
+        arrowType = 'ar-arrow-left';
+    } else if (instructionLower.includes('slight right') || instructionLower.includes('bear right')) {
+        arrowType = 'ar-arrow-slight-right';
+    } else if (instructionLower.includes('slight left') || instructionLower.includes('bear left')) {
+        arrowType = 'ar-arrow-slight-left';
+    } else if (instructionLower.includes('sharp right')) {
+        arrowType = 'ar-arrow-sharp-right';
+    } else if (instructionLower.includes('sharp left')) {
+        arrowType = 'ar-arrow-sharp-left';
+    } else if (instructionLower.includes('u-turn') || instructionLower.includes('u turn')) {
+        arrowType = 'ar-arrow-uturn';
+    } else if (instructionLower.includes('straight') || instructionLower.includes('continue') || 
+               instructionLower.includes('head')) {
+        arrowType = 'ar-arrow-straight';
+    }
+    
+    elements.arrowIcon.setAttribute('href', `#${arrowType}`);
+    
+    // Update all arrows in the animation
+    const allArrows = elements.arArrows.querySelectorAll('use');
+    allArrows.forEach(arrow => {
+        arrow.setAttribute('href', `#${arrowType}`);
     });
 }
 
@@ -453,11 +507,13 @@ function nextStep() {
         showCurrentStep();
         
         const step = state.navigation.steps[state.navigation.currentStepIndex];
-        speak(step.instruction);
+        const distanceAnnouncement = formatDistanceForSpeech(step.distance_meters);
+        speak(`In ${distanceAnnouncement}, ${step.instruction}`);
     } else {
         // Reached destination
         speak('You have arrived at your destination');
-        showMessage('You have arrived!', 'success');
+        showToast('You have arrived!', 'success');
+        stopNavigation();
     }
 }
 
@@ -467,7 +523,8 @@ function previousStep() {
         showCurrentStep();
         
         const step = state.navigation.steps[state.navigation.currentStepIndex];
-        speak(step.instruction);
+        const distanceAnnouncement = formatDistanceForSpeech(step.distance_meters);
+        speak(`In ${distanceAnnouncement}, ${step.instruction}`);
     }
 }
 
@@ -479,20 +536,23 @@ function stopNavigation() {
     
     stopLocationTracking();
     
-    elements.navigationCard.style.display = 'none';
+    // Hide AR overlay, show voice button
+    elements.arNavOverlay.classList.remove('show');
+    elements.voiceButtonContainer.classList.remove('hidden');
     
     speak('Navigation stopped');
-    showMessage('Navigation stopped', 'info');
+    showToast('Navigation stopped', 'info');
     console.log('Navigation stopped');
 }
 
-// ==================== Real-time Location Tracking ====================
-function checkProximityToNextStep() {
+// ==================== Real-time Navigation ====================
+function updateNavigationProgress() {
     if (!state.navigation.active || !state.gps.currentPosition) return;
     
     const currentStep = state.navigation.steps[state.navigation.currentStepIndex];
     if (!currentStep) return;
     
+    // Calculate distance to end of current step (only for auto-advancing)
     const distanceToEnd = calculateDistance(
         state.gps.currentPosition.lat,
         state.gps.currentPosition.lng,
@@ -500,20 +560,20 @@ function checkProximityToNextStep() {
         currentStep.end_location.lng
     );
     
-    console.log(`Distance to next step: ${distanceToEnd.toFixed(2)}m`);
+    // NOTE: We display Google Maps API distance (step.distance_meters), NOT calculated distance
+    // This ensures accuracy - we only use GPS to detect when to advance steps
     
     // If close to end of current step, move to next step
-    if (distanceToEnd < 10 && state.navigation.currentStepIndex < state.navigation.steps.length - 1) {
+    if (distanceToEnd < 15 && state.navigation.currentStepIndex < state.navigation.steps.length - 1) {
         const nextIndex = state.navigation.currentStepIndex + 1;
         
-        // Check if we've already announced this step
         if (!state.navigation.announced.has(nextIndex)) {
             state.navigation.announced.add(nextIndex);
             nextStep();
         }
     }
     
-    // Check if approaching next step for early announcement
+    // Check if approaching next step for announcement
     if (state.navigation.currentStepIndex < state.navigation.steps.length - 1) {
         const nextStep = state.navigation.steps[state.navigation.currentStepIndex + 1];
         const distanceToNextStart = calculateDistance(
@@ -523,17 +583,19 @@ function checkProximityToNextStep() {
             nextStep.start_location.lng
         );
         
+        // Announce when approaching (only used to trigger announcement, not for distance value)
         const announceKey = `approaching_${state.navigation.currentStepIndex + 1}`;
         if (distanceToNextStart < ANNOUNCEMENT_DISTANCE && !state.navigation.announced.has(announceKey)) {
             state.navigation.announced.add(announceKey);
-            speak(`In ${Math.round(distanceToNextStart)} meters, ${nextStep.instruction}`);
+            // Use Google Maps API distance for the announcement, not calculated distance
+            const nextStepDistance = formatDistanceForSpeech(nextStep.distance_meters);
+            speak(`In ${nextStepDistance}, ${nextStep.instruction}`);
         }
     }
 }
 
-// Haversine formula to calculate distance between two GPS coordinates
 function calculateDistance(lat1, lon1, lat2, lon2) {
-    const R = 6371e3; // Earth radius in meters
+    const R = 6371e3;
     const φ1 = lat1 * Math.PI / 180;
     const φ2 = lat2 * Math.PI / 180;
     const Δφ = (lat2 - lat1) * Math.PI / 180;
@@ -544,45 +606,40 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
               Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     
-    return R * c; // Distance in meters
+    return R * c;
 }
 
 // ==================== Event Listeners ====================
 function setupEventListeners() {
     elements.voiceBtn.addEventListener('click', startVoiceRecording);
-    elements.nextStepBtn.addEventListener('click', nextStep);
-    elements.prevStepBtn.addEventListener('click', previousStep);
-    elements.stopNavBtn.addEventListener('click', stopNavigation);
+    elements.nextBtn.addEventListener('click', nextStep);
+    elements.prevBtn.addEventListener('click', previousStep);
+    elements.stopBtn.addEventListener('click', stopNavigation);
 }
 
-// ==================== UI Helper Functions ====================
-function updateStatus(type, text) {
-    const element = elements[`${type}Status`];
-    if (element) {
-        element.textContent = text;
-    }
+// ==================== UI Helpers ====================
+function setStatusActive(type) {
+    const dot = elements[`${type}StatusDot`];
+    if (dot) dot.classList.add('active');
 }
 
 function showLoading(text = 'Loading...') {
     elements.loadingText.textContent = text;
-    elements.loadingOverlay.style.display = 'flex';
+    elements.loadingOverlay.classList.add('show');
 }
 
 function hideLoading() {
-    elements.loadingOverlay.style.display = 'none';
+    elements.loadingOverlay.classList.remove('show');
 }
 
-function showMessage(text, type = 'info') {
-    const messageDiv = document.createElement('div');
-    messageDiv.className = `message ${type}`;
-    messageDiv.textContent = text;
+function showToast(text, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = text;
     
-    elements.messageContainer.appendChild(messageDiv);
+    elements.toastContainer.appendChild(toast);
     
-    // Auto remove after 5 seconds
-    setTimeout(() => {
-        messageDiv.remove();
-    }, 5000);
+    setTimeout(() => toast.remove(), 3000);
 }
 
-console.log('✅ NewSight Navigation app.js loaded');
+console.log('✅ NewSight Navigation HUD loaded');
