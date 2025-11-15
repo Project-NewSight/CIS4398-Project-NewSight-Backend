@@ -8,6 +8,7 @@ from app.routes import sms_routes
 from app.routes import contacts
 from app.routes import emergency_alert
 from app.routes import familiar_face
+from app.routes import object_detection_backend
 
 app = FastAPI(
     title="NewSight API",
@@ -33,6 +34,7 @@ app.add_middleware(
 app.include_router(sms_routes.router)
 app.include_router(contacts.router)
 app.include_router(emergency_alert.router)
+app.include_router(object_detection_backend.router)
 
 # Familiar Face Detection Feature Routes
 # Register WebSocket routes directly to maintain original paths (/ws, /ws/verify)
@@ -46,5 +48,6 @@ def root():
         "features": [
             "Emergency Contact Management",
             "Familiar Face Detection"
+            "Object Detection Backend"
         ]
     }
