@@ -9,6 +9,7 @@ from app.routes import contacts
 from app.routes import emergency_alert
 from app.routes import familiar_face
 from app.routes import voice_routes
+from app.routes import object_detection_backend
 
 app = FastAPI(
     title="NewSight API",
@@ -34,6 +35,7 @@ app.add_middleware(
 app.include_router(sms_routes.router)
 app.include_router(contacts.router)
 app.include_router(emergency_alert.router)
+app.include_router(object_detection_backend.router)
 
 # Voice Command Feature Route
 app.include_router(voice_routes.router)
@@ -51,5 +53,7 @@ def root():
             "Emergency Contact Management",
             "Familiar Face Detection",
             "Voice Command"
+            "Object Detection Backend"
+
         ]
     }
