@@ -118,17 +118,26 @@ async def websocket_endpoint(websocket: WebSocket):
                     try:
                         detections = text_detector.detect_text_image(image)
                         
+                        # Convert numpy types to JSON-serializable Python types
+                        json_safe_detections = []
+                        for det in detections:
+                            json_safe_detections.append({
+                                'text': str(det['text']),
+                                'confidence': float(det['confidence']),
+                                'bbox': [[float(x), float(y)] for x, y in det['bbox']] if det.get('bbox') else None
+                            })
+                        
                         # Create combined text string
-                        text_string = ' '.join([d['text'] for d in detections if d.get('confidence', 0) >= 0.5])
+                        text_string = ' '.join([d['text'] for d in json_safe_detections if d.get('confidence', 0) >= 0.5])
                         
                         # Prepare response
                         response = {
-                            "detections": detections,
+                            "detections": json_safe_detections,
                             "text_string": text_string,
-                            "num_detections": len(detections)
+                            "num_detections": len(json_safe_detections)
                         }
                         
-                        logger.info(f"Detected text: '{text_string}' ({len(detections)} elements)")
+                        logger.info(f"Detected text: '{text_string}' ({len(json_safe_detections)} elements)")
                         
                         # Send response back to client
                         await websocket.send_text(json.dumps(response))
