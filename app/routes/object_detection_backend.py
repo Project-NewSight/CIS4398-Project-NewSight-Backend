@@ -254,6 +254,11 @@ async def detect(
         "closest": closest_info,
         "class_counts": class_counts,
         "processing_ms": round(processing_ms, 1),
+
+        # New TTS output
+        "TTS_Output": {
+            "messages": summary_msg
+        },
     }
 
     logger.debug(
