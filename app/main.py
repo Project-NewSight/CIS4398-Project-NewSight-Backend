@@ -37,7 +37,7 @@ app.add_middleware(
 app.include_router(sms_routes.router)
 app.include_router(contacts.router)
 app.include_router(emergency_alert.router)
-app.include_router(object_detection_backend.router)
+#app.include_router(object_detection_backend.router)
 
 # Voice Command Feature Route
 app.include_router(voice_routes.router)
