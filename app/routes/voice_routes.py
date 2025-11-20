@@ -1,6 +1,9 @@
-from fastapi import APIRouter, UploadFile, File
+from fastapi import APIRouter, UploadFile, File, Header
 from app.services.voice_service import SpeechToText
 from app.services.voice_agent import VoiceCommandAgent
+from app.services.navigation_service import NavigationService
+from app.routes.location_routes import get_user_location
+from typing import Optional
 import tempfile
 import os
 
@@ -9,6 +12,7 @@ router = APIRouter(prefix="/voice", tags=["voice Commands"])
 
 transcriber = SpeechToText()
 agent = VoiceCommandAgent()
+nav_service = NavigationService()
 
 # listens for wake word
 @router.post("/wake-word")
@@ -38,9 +42,17 @@ async def check_wake_word(audio: UploadFile = File(...)):
         return {"error": str(e), "wake_word_detected": False}
 
 @router.post("/transcribe")
-async def process_voice_command(audio: UploadFile = File(...)):
+async def process_voice_command(
+    audio: UploadFile = File(...),
+    x_session_id: Optional[str] = Header(None)
+):
     """
     Receive audio, transcribe it, process with agent, and return JSON response
+    
+    For NAVIGATION feature:
+    - Pulls destination from voice_agent
+    - Gets location from location_routes
+    - Starts navigation and returns full route
     """
     try:
         # Save uploaded audio temporarily
@@ -100,7 +112,66 @@ async def process_voice_command(audio: UploadFile = File(...)):
         filtered_response = filter_agent_response(agent_response)
         print(f"🤖 Agent response: {filtered_response}")
 
-        # Build JSON response
+        # ===== NAVIGATION INTEGRATION =====
+        # If voice agent identified NAVIGATION, pull destination and start navigation
+        if agent_response.get("feature") == "NAVIGATION" and x_session_id:
+            destination = filtered_response.get("destination")
+            
+            if destination:
+                print(f"🗺️  NAVIGATION feature detected - destination: '{destination}'")
+                
+                # Get user location from location WebSocket storage
+                location = get_user_location(x_session_id)
+                
+                if location:
+                    try:
+                        print(f"📍 Got location: ({location['latitude']}, {location['longitude']})")
+                        
+                        # Start navigation using the destination from voice_agent
+                        directions = nav_service.start_navigation(
+                            session_id=x_session_id,
+                            origin_lat=location["latitude"],
+                            origin_lng=location["longitude"],
+                            destination=destination
+                        )
+                        
+                        print(f"✅ Navigation started to: {directions['destination']}")
+                        
+                        # Add directions to the response
+                        filtered_response["directions"] = directions
+                        
+                        return {
+                            "confidence": agent_response.get("confidence", 0.0),
+                            "extracted_params": filtered_response,
+                            "TTS_Output": {
+                                "message": f"Starting navigation to {directions['destination']}"
+                            }
+                        }
+                    
+                    except Exception as nav_error:
+                        print(f"❌ Navigation error: {str(nav_error)}")
+                        filtered_response["navigation_error"] = str(nav_error)
+                        
+                        return {
+                            "confidence": agent_response.get("confidence", 0.0),
+                            "extracted_params": filtered_response,
+                            "TTS_Output": {
+                                "message": f"Found {destination}, but couldn't get directions. Please try again."
+                            }
+                        }
+                else:
+                    print(f"⚠️  No location found for session {x_session_id}")
+                    filtered_response["navigation_error"] = "Location not available"
+                    
+                    return {
+                        "confidence": agent_response.get("confidence", 0.0),
+                        "extracted_params": filtered_response,
+                        "TTS_Output": {
+                            "message": "I need your location to start navigation. Please enable GPS."
+                        }
+                    }
+
+        # Build JSON response for non-navigation features or if session_id not provided
         if agent_response.get("feature"):
             response_data = {
                 "confidence": agent_response.get("confidence", 0.0),
