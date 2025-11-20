@@ -1,5 +1,5 @@
 # Unified API for NewSight Backend
-# Combines Emergency Contact and Familiar Face Detection features
+# Combines Emergency Contact and Familiar Face Detection and Voice Command features
 import os
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,11 +8,13 @@ from app.routes import sms_routes
 from app.routes import contacts
 from app.routes import emergency_alert
 from app.routes import familiar_face
+from app.routes import voice_routes
+from app.routes import object_detection_backend
 
 app = FastAPI(
     title="NewSight API",
     version="1.0",
-    description="Backend API for Emergency Contact and Familiar Face Detection features"
+    description="Backend API for Emergency Contact, Familiar Face Detection, and Voice Command features"
 )
 
 # CORS middleware for WebSocket and API access
@@ -28,11 +30,15 @@ app.add_middleware(
 # Photos are uploaded directly to S3 and served via S3 URLs, so this mount is not needed
 # app.mount("/temp_photos", StaticFiles(directory="temp_photos"), name="temp_photos")
 
-# Include routers for both features
+# Include routers for features
 # Emergency Contact Feature Routes
 app.include_router(sms_routes.router)
 app.include_router(contacts.router)
 app.include_router(emergency_alert.router)
+app.include_router(object_detection_backend.router)
+
+# Voice Command Feature Route
+app.include_router(voice_routes.router)
 
 # Familiar Face Detection Feature Routes
 # Register WebSocket routes directly to maintain original paths (/ws, /ws/verify)
@@ -45,6 +51,9 @@ def root():
         "message": "NewSight Backend API Running Successfully!",
         "features": [
             "Emergency Contact Management",
-            "Familiar Face Detection"
+            "Familiar Face Detection",
+            "Voice Command"
+            "Object Detection Backend"
+
         ]
     }
