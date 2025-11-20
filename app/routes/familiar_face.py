@@ -24,10 +24,10 @@ S3_PREFIX = os.getenv("S3_PREFIX", "familiar_img/")
 AWS_REGION = os.getenv("AWS_REGION", "us-east-2")
 
 DISTANCE_THRESHOLDS = {
-    "VGG-Face": 0.67,
+    "VGG-Face": 0.68,
     "Facenet": 10,
     "Facenet512": 10,
-    "ArcFace": 4.15,
+    "ArcFace": 0.35,
     "Dlib": 0.6,
     "SFace": 0.593
 }
@@ -71,6 +71,8 @@ def sync_s3_faces_to_local():
 async def ws_verify(websocket: WebSocket):
     await websocket.accept()
     print("[WS] connected to", websocket.url.path)
+    ws_start_time = time.time()
+    SUPPRESS_UNKNOWN_SECONDS = 1.2
     last_ts = 0.0
     current_feature = None
 
@@ -105,7 +107,7 @@ async def ws_verify(websocket: WebSocket):
                         jpeg_bytes = base64.b64decode(data.get("image_b64") or "")
                         await websocket.send_text(json.dumps({"ok": True, "note": "received", "len": len(jpeg_bytes)}))
 
-                        await process_face_recognition(jpeg_bytes, websocket)
+                        await process_face_recognition(jpeg_bytes, websocket, ws_start_time, SUPPRESS_UNKNOWN_SECONDS)
                         continue
 
                 except Exception as e:
@@ -123,7 +125,7 @@ async def ws_verify(websocket: WebSocket):
 
             jpeg_bytes = message["bytes"]
 
-            await process_face_recognition(jpeg_bytes, websocket)
+            await process_face_recognition(jpeg_bytes, websocket, ws_start_time, SUPPRESS_UNKNOWN_SECONDS)
 
     except WebSocketDisconnect:
         print("[WS] Client disconnected")
@@ -137,7 +139,7 @@ async def ws_verify(websocket: WebSocket):
             pass
 
 
-async def process_face_recognition(jpeg_bytes: bytes, websocket: WebSocket):
+async def process_face_recognition(jpeg_bytes: bytes, websocket: WebSocket, ws_start_time: float, SUPPRESS_UNKNOWN_SECONDS: float):
 
     try:
 
@@ -172,12 +174,12 @@ async def process_face_recognition(jpeg_bytes: bytes, websocket: WebSocket):
         )
 
         if not result or len(result[0]) == 0:
+            if time.time() - ws_start_time < SUPPRESS_UNKNOWN_SECONDS:
+                return
             await websocket.send_text(json.dumps({
                 "ok": True,
                 "match": False,
-                "contactName": "Unknown",
-                "confidence": 0.0,
-                "note": "no_face_detected"
+                "contactName": "Unknown"
             }))
             return
 
@@ -202,14 +204,13 @@ async def process_face_recognition(jpeg_bytes: bytes, websocket: WebSocket):
         name_stem, _ext = os.path.splitext(identity)
 
         if distance > DISTANCE_THRESHOLD:
+            if time.time() - ws_start_time < SUPPRESS_UNKNOWN_SECONDS:
+                return
             print(f"[FACE] Rejected: {name_stem} (distance={distance:.4f}, threshold={DISTANCE_THRESHOLD})")
             await websocket.send_text(json.dumps({
                 "ok": True,
                 "match": False,
-                "contactName": "Unknown",
-                "confidence": 0.0,
-                "distance": round(distance, 4),
-                "note": "below_threshold"
+                "contactName": "Unknown"
             }))
             return
 
@@ -219,9 +220,7 @@ async def process_face_recognition(jpeg_bytes: bytes, websocket: WebSocket):
         await websocket.send_text(json.dumps({
             "ok": True,
             "match": True,
-            "contactName": name_stem,
-            "confidence": round(confidence, 4),
-            "distance": round(distance, 4)
+            "contactName": name_stem
         }))
 
     except Exception as e:
