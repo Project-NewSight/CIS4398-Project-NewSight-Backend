@@ -189,7 +189,7 @@ def is_generic_place_name(destination: str) -> bool:
         'starbucks', 'cvs', 'walgreens', 'mcdonalds', 'walmart', 'target',
         'dunkin', 'subway', 'pizza', 'bank', 'atm', 'gas station', 'pharmacy',
         'grocery store', 'restaurant', 'cafe', 'coffee', 'hospital', 'hotel',
-        'gym', 'library', 'post office', 'bar', 'church', 'school', 'park'
+        'gym', 'library', 'post office', 'bar', 'church', 'school'
     ]
     
     destination_lower = destination.lower().strip()

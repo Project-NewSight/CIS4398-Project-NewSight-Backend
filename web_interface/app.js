@@ -1,18 +1,26 @@
 /**
  * NewSight Navigation - HUD Interface
  * Car-style heads-up display with voice control
+ * Now using WebSocket architecture for real-time navigation
  */
 
 // ==================== Configuration ====================
 const API_BASE_URL = 'http://localhost:8000';
-const ANNOUNCEMENT_DISTANCE = 20; // meters
+const WS_BASE_URL = 'ws://localhost:8000';
 const LOCATION_UPDATE_INTERVAL = 3000; // ms
+
+// Generate unique session ID for this browser session
+const SESSION_ID = 'web_' + Math.random().toString(36).substr(2, 9);
 
 // ==================== Global State ====================
 const state = {
     camera: { active: false, stream: null },
     gps: { active: false, watchId: null, currentPosition: null },
     backend: { connected: false },
+    websockets: {
+        location: null,
+        navigation: null
+    },
     navigation: {
         active: false,
         currentStepIndex: 0,
@@ -70,10 +78,12 @@ const elements = {
 // ==================== Initialization ====================
 window.addEventListener('load', async () => {
     console.log('🚀 NewSight Navigation HUD initializing...');
+    console.log(`📱 Session ID: ${SESSION_ID}`);
     
     await checkBackendConnection();
     await initializeCamera();
     await initializeGPS();
+    connectLocationWebSocket(); // Connect location tracking
     initializeSpeechRecognition();
     setupEventListeners();
     
@@ -83,7 +93,7 @@ window.addEventListener('load', async () => {
 // ==================== Backend Connection ====================
 async function checkBackendConnection() {
     try {
-        const response = await fetch(`${API_BASE_URL}/api/health`);
+        const response = await fetch(`${API_BASE_URL}/`);
         if (response.ok) {
             state.backend.connected = true;
             setStatusActive('backend');
@@ -130,6 +140,9 @@ async function initializeGPS() {
         setStatusActive('gps');
         console.log('✅ GPS initialized', position);
         
+        // Start continuous GPS tracking
+        startLocationTracking();
+        
     } catch (error) {
         console.error('❌ GPS error:', error);
         showToast('GPS access denied', 'error');
@@ -161,9 +174,7 @@ function startLocationTracking() {
                 accuracy: position.coords.accuracy
             };
             
-            if (state.navigation.active) {
-                updateNavigationProgress();
-            }
+            console.log('📍 GPS update:', state.gps.currentPosition);
         },
         (error) => console.error('GPS tracking error:', error),
         { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
@@ -178,6 +189,48 @@ function stopLocationTracking() {
         state.gps.watchId = null;
         console.log('📍 Location tracking stopped');
     }
+}
+
+// ==================== Location WebSocket ====================
+function connectLocationWebSocket() {
+    console.log('🔌 Connecting to location WebSocket...');
+    
+    const ws = new WebSocket(`${WS_BASE_URL}/location/ws`);
+    
+    ws.onopen = () => {
+        console.log('✅ Location WebSocket connected');
+        state.websockets.location = ws;
+        
+        // Start sending location updates
+        setInterval(() => {
+            if (ws.readyState === WebSocket.OPEN && state.gps.currentPosition) {
+                const locationData = {
+                    session_id: SESSION_ID,
+                    latitude: state.gps.currentPosition.lat,
+                    longitude: state.gps.currentPosition.lng,
+                    timestamp: Date.now()
+                };
+                
+                ws.send(JSON.stringify(locationData));
+                console.log('📡 Sent location update');
+            }
+        }, LOCATION_UPDATE_INTERVAL);
+    };
+    
+    ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        console.log('📍 Location WebSocket response:', data);
+    };
+    
+    ws.onerror = (error) => {
+        console.error('❌ Location WebSocket error:', error);
+        showToast('Location tracking error', 'error');
+    };
+    
+    ws.onclose = () => {
+        console.log('🔌 Location WebSocket closed, reconnecting in 5s...');
+        setTimeout(connectLocationWebSocket, 5000);
+    };
 }
 
 // ==================== Speech Recognition ====================
@@ -283,30 +336,17 @@ async function processNavigationRequest(requestText) {
     showLoading('Processing your request...');
     
     try {
-        // Extract destination
-        const response = await fetch(`${API_BASE_URL}/api/navigation/process-request`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ request: requestText })
-        });
+        // Parse destination from request (simple extraction)
+        const destination = extractDestination(requestText);
         
-        const data = await response.json();
-        
-        if (!response.ok || data.status !== 'success') {
-            throw new Error(data.message || 'Failed to process request');
+        if (!destination) {
+            throw new Error('Could not understand destination');
         }
         
-        const destination = data.extracted_destination;
         showToast(`Finding: ${destination}`, 'info');
         
-        // Get current location
-        if (!state.gps.currentPosition) {
-            const position = await getCurrentPosition();
-            state.gps.currentPosition = position;
-        }
-        
-        // Get directions
-        await getDirections(destination);
+        // Start navigation using new API
+        await startNavigationSession(destination);
         
     } catch (error) {
         console.error('Error processing request:', error);
@@ -317,15 +357,34 @@ async function processNavigationRequest(requestText) {
     }
 }
 
-async function getDirections(destination) {
+function extractDestination(text) {
+    // Simple destination extraction
+    const patterns = [
+        /(?:directions?|navigate|take me|go|going) (?:to|towards?) (.+)/i,
+        /(?:find|locate|where is) (.+)/i,
+        /to (.+)/i
+    ];
+    
+    for (const pattern of patterns) {
+        const match = text.match(pattern);
+        if (match && match[1]) {
+            return match[1].trim().replace(/\s+(please|thanks?|thank you)$/i, '');
+        }
+    }
+    
+    return text; // Fallback to full text
+}
+
+async function startNavigationSession(destination) {
     showLoading('Getting directions...');
     
     try {
-        const response = await fetch(`${API_BASE_URL}/api/navigation/get-directions`, {
+        // Call new navigation start endpoint
+        const response = await fetch(`${API_BASE_URL}/navigation/start`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                origin: state.gps.currentPosition,
+                session_id: SESSION_ID,
                 destination: destination
             })
         });
@@ -333,29 +392,32 @@ async function getDirections(destination) {
         const data = await response.json();
         
         if (!response.ok || data.status !== 'success') {
-            throw new Error(data.message || 'Failed to get directions');
+            throw new Error(data.detail || data.message || 'Failed to start navigation');
         }
         
-        // Start navigation
-        startNavigation(data);
+        // Store navigation data
+        state.navigation.steps = data.directions.steps;
+        state.navigation.destination = data.directions.destination;
+        state.navigation.currentStepIndex = 0;
+        state.navigation.active = true;
+        state.navigation.announced.clear();
+        
+        // Show AR overlay
+        showNavigationUI(data.directions);
+        
+        // Connect to navigation WebSocket for real-time updates
+        connectNavigationWebSocket();
         
     } catch (error) {
-        console.error('Error getting directions:', error);
-        showToast(error.message || 'Failed to get directions', 'error');
+        console.error('Error starting navigation:', error);
+        showToast(error.message || 'Failed to start navigation', 'error');
         speak('Sorry, I could not find directions to that location.');
     } finally {
         hideLoading();
     }
 }
 
-// ==================== Navigation Control ====================
-function startNavigation(routeData) {
-    state.navigation.active = true;
-    state.navigation.currentStepIndex = 0;
-    state.navigation.steps = routeData.steps;
-    state.navigation.destination = routeData.destination;
-    state.navigation.announced = new Set();
-    
+function showNavigationUI(routeData) {
     // Show AR overlay, hide voice button
     elements.arNavOverlay.classList.add('show');
     elements.voiceButtonContainer.classList.add('hidden');
@@ -368,9 +430,6 @@ function startNavigation(routeData) {
     // Show first step
     showCurrentStep();
     
-    // Start GPS tracking
-    startLocationTracking();
-    
     // Announce start
     const firstStep = routeData.steps[0];
     const firstDistance = formatDistanceForSpeech(firstStep.distance_meters);
@@ -380,6 +439,99 @@ function startNavigation(routeData) {
     console.log('🗺️ Navigation started', routeData);
 }
 
+// ==================== Navigation WebSocket ====================
+function connectNavigationWebSocket() {
+    console.log('🔌 Connecting to navigation WebSocket...');
+    
+    const ws = new WebSocket(`${WS_BASE_URL}/navigation/ws`);
+    
+    ws.onopen = () => {
+        console.log('✅ Navigation WebSocket connected');
+        state.websockets.navigation = ws;
+        
+        // Send initial session ID
+        ws.send(JSON.stringify({
+            session_id: SESSION_ID
+        }));
+        
+        // Start sending location updates
+        const locationInterval = setInterval(() => {
+            if (ws.readyState === WebSocket.OPEN && state.gps.currentPosition) {
+                const locationData = {
+                    latitude: state.gps.currentPosition.lat,
+                    longitude: state.gps.currentPosition.lng
+                };
+                
+                ws.send(JSON.stringify(locationData));
+            } else if (ws.readyState === WebSocket.CLOSED) {
+                clearInterval(locationInterval);
+            }
+        }, 2000); // Send location every 2 seconds during navigation
+    };
+    
+    ws.onmessage = (event) => {
+        const update = JSON.parse(event.data);
+        console.log('🗺️ Navigation update:', update);
+        
+        handleNavigationUpdate(update);
+    };
+    
+    ws.onerror = (error) => {
+        console.error('❌ Navigation WebSocket error:', error);
+        showToast('Navigation connection error', 'error');
+    };
+    
+    ws.onclose = () => {
+        console.log('🔌 Navigation WebSocket closed');
+        state.websockets.navigation = null;
+    };
+}
+
+function handleNavigationUpdate(update) {
+    if (update.status === 'error') {
+        showToast(update.message || 'Navigation error', 'error');
+        return;
+    }
+    
+    // Update current step display
+    state.navigation.currentStepIndex = update.current_step - 1;
+    
+    // Update AR display with real-time data
+    elements.stepCurrent.textContent = update.current_step;
+    elements.arDistance.textContent = formatDistance(update.distance_to_next);
+    elements.arInstruction.textContent = update.instruction;
+    
+    // Update street name
+    const streetName = extractStreetName(update.instruction);
+    if (streetName) {
+        elements.streetName.textContent = streetName;
+    }
+    
+    // Update arrow
+    updateArrowIcon(update.instruction);
+    
+    // Handle announcements
+    if (update.should_announce && update.announcement) {
+        speak(update.announcement);
+        showToast(update.announcement, 'info');
+    }
+    
+    // Handle step completion
+    if (update.status === 'step_completed') {
+        console.log(`✅ Step ${update.current_step} completed`);
+    }
+    
+    // Handle arrival
+    if (update.status === 'arrived') {
+        speak('You have arrived at your destination');
+        showToast('You have arrived!', 'success');
+        setTimeout(() => {
+            stopNavigation();
+        }, 3000);
+    }
+}
+
+// ==================== Navigation Control ====================
 function showCurrentStep() {
     const step = state.navigation.steps[state.navigation.currentStepIndex];
     if (!step) return;
@@ -387,11 +539,10 @@ function showCurrentStep() {
     // Update step counter
     elements.stepCurrent.textContent = state.navigation.currentStepIndex + 1;
     
-    // Update AR distance - ALWAYS from Google Maps API (step.distance_meters)
-    // This ensures we show accurate, official Google Maps distances, not calculated estimates
+    // Update AR distance
     elements.arDistance.textContent = formatDistance(step.distance_meters);
     
-    // Update instruction - from Google Maps API
+    // Update instruction
     elements.arInstruction.textContent = step.instruction;
     
     // Extract and update street name
@@ -420,7 +571,6 @@ function extractStreetName(instruction) {
         }
     }
     
-    // If no street name found, return generic message
     return 'Continue';
 }
 
@@ -428,7 +578,7 @@ function formatDistance(meters) {
     // Convert meters to feet/miles
     const feet = meters * 3.28084;
     
-    if (feet < 528) { // Less than 0.1 mile (528 feet)
+    if (feet < 528) {
         return `${Math.round(feet)} ft`;
     } else {
         const miles = feet / 5280;
@@ -452,18 +602,15 @@ function formatDuration(seconds) {
 }
 
 function formatDistanceForSpeech(meters) {
-    // Use the EXACT same format as display to avoid confusion
-    // Convert meters to feet/miles exactly as shown on screen
     const feet = meters * 3.28084;
     
-    if (feet < 528) { // Less than 0.1 mile
+    if (feet < 528) {
         return `${Math.round(feet)} feet`;
     } else {
         const miles = feet / 5280;
         if (miles < 0.2) {
             return `${Math.round(feet)} feet`;
         } else {
-            // Say exactly what's shown on screen
             return `${miles.toFixed(1)} miles`;
         }
     }
@@ -471,7 +618,7 @@ function formatDistanceForSpeech(meters) {
 
 function updateArrowIcon(instruction) {
     const instructionLower = instruction.toLowerCase();
-    let arrowType = 'ar-arrow-straight'; // default
+    let arrowType = 'ar-arrow-straight';
     
     if (instructionLower.includes('turn right') || instructionLower.includes('right onto')) {
         arrowType = 'ar-arrow-right';
@@ -494,7 +641,6 @@ function updateArrowIcon(instruction) {
     
     elements.arrowIcon.setAttribute('href', `#${arrowType}`);
     
-    // Update all arrows in the animation
     const allArrows = elements.arArrows.querySelectorAll('use');
     allArrows.forEach(arrow => {
         arrow.setAttribute('href', `#${arrowType}`);
@@ -510,7 +656,6 @@ function nextStep() {
         const distanceAnnouncement = formatDistanceForSpeech(step.distance_meters);
         speak(`In ${distanceAnnouncement}, ${step.instruction}`);
     } else {
-        // Reached destination
         speak('You have arrived at your destination');
         showToast('You have arrived!', 'success');
         stopNavigation();
@@ -529,12 +674,17 @@ function previousStep() {
 }
 
 function stopNavigation() {
+    // Close navigation WebSocket
+    if (state.websockets.navigation) {
+        state.websockets.navigation.close();
+        state.websockets.navigation = null;
+    }
+    
+    // Reset state
     state.navigation.active = false;
     state.navigation.currentStepIndex = 0;
     state.navigation.steps = [];
     state.navigation.announced.clear();
-    
-    stopLocationTracking();
     
     // Hide AR overlay, show voice button
     elements.arNavOverlay.classList.remove('show');
@@ -542,71 +692,7 @@ function stopNavigation() {
     
     speak('Navigation stopped');
     showToast('Navigation stopped', 'info');
-    console.log('Navigation stopped');
-}
-
-// ==================== Real-time Navigation ====================
-function updateNavigationProgress() {
-    if (!state.navigation.active || !state.gps.currentPosition) return;
-    
-    const currentStep = state.navigation.steps[state.navigation.currentStepIndex];
-    if (!currentStep) return;
-    
-    // Calculate distance to end of current step (only for auto-advancing)
-    const distanceToEnd = calculateDistance(
-        state.gps.currentPosition.lat,
-        state.gps.currentPosition.lng,
-        currentStep.end_location.lat,
-        currentStep.end_location.lng
-    );
-    
-    // NOTE: We display Google Maps API distance (step.distance_meters), NOT calculated distance
-    // This ensures accuracy - we only use GPS to detect when to advance steps
-    
-    // If close to end of current step, move to next step
-    if (distanceToEnd < 15 && state.navigation.currentStepIndex < state.navigation.steps.length - 1) {
-        const nextIndex = state.navigation.currentStepIndex + 1;
-        
-        if (!state.navigation.announced.has(nextIndex)) {
-            state.navigation.announced.add(nextIndex);
-            nextStep();
-        }
-    }
-    
-    // Check if approaching next step for announcement
-    if (state.navigation.currentStepIndex < state.navigation.steps.length - 1) {
-        const nextStep = state.navigation.steps[state.navigation.currentStepIndex + 1];
-        const distanceToNextStart = calculateDistance(
-            state.gps.currentPosition.lat,
-            state.gps.currentPosition.lng,
-            nextStep.start_location.lat,
-            nextStep.start_location.lng
-        );
-        
-        // Announce when approaching (only used to trigger announcement, not for distance value)
-        const announceKey = `approaching_${state.navigation.currentStepIndex + 1}`;
-        if (distanceToNextStart < ANNOUNCEMENT_DISTANCE && !state.navigation.announced.has(announceKey)) {
-            state.navigation.announced.add(announceKey);
-            // Use Google Maps API distance for the announcement, not calculated distance
-            const nextStepDistance = formatDistanceForSpeech(nextStep.distance_meters);
-            speak(`In ${nextStepDistance}, ${nextStep.instruction}`);
-        }
-    }
-}
-
-function calculateDistance(lat1, lon1, lat2, lon2) {
-    const R = 6371e3;
-    const φ1 = lat1 * Math.PI / 180;
-    const φ2 = lat2 * Math.PI / 180;
-    const Δφ = (lat2 - lat1) * Math.PI / 180;
-    const Δλ = (lon2 - lon1) * Math.PI / 180;
-    
-    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-              Math.cos(φ1) * Math.cos(φ2) *
-              Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    
-    return R * c;
+    console.log('🛑 Navigation stopped');
 }
 
 // ==================== Event Listeners ====================
