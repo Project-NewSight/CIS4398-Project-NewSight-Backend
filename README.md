@@ -1,8 +1,9 @@
 # Project NewSight – Unified Backend API
 
-This backend service powers **Project NewSight**, combining two major features:
+This backend service powers **Project NewSight**, combining features:
 1. **Emergency Contact and Alert System** - Allows users to register trusted contacts and automatically send location, photo, and alert messages during emergencies
 2. **Familiar Face Detection** - Real-time face recognition to identify familiar contacts using DeepFace and WebSocket connections
+3. **Voice Command** - Allows users to speak through the Android phone's microphone to send voice commands to activate features. The feature can also be activated using a wake word "Hey Guide".
 
 ## Overview
 
@@ -12,8 +13,10 @@ The backend is built with **FastAPI** and integrates with:
 - **Vonage SMS API** – for sending alerts to trusted contacts
 - **DeepFace** – for face recognition and matching
 - **WebSocket** – for real-time face recognition processing
+- **Groq STT** - for conversting speech to text
+- **Groq llama** - for deciding which feature to execute based on user command
 
-The system ensures that in an emergency, user data is safely transmitted, messages are delivered quickly, and photos are uploaded to a secure cloud location. Additionally, it provides real-time face recognition capabilities to identify familiar contacts.
+The system ensures that in an emergency, user data is safely transmitted, messages are delivered quickly, and photos are uploaded to a secure cloud location. Additionally, it provides real-time face recognition capabilities to identify familiar contacts. Users can also interact with the system via voice commands, allowing hands-free operation to trigger other features. 
 
 ---
 
@@ -31,6 +34,13 @@ The system ensures that in an emergency, user data is safely transmitted, messag
 - Configurable face recognition models (VGG-Face, Facenet, ArcFace, etc.)
 - Automatic synchronization of familiar faces from S3 to local cache
 - Confidence scoring and distance thresholds for matches
+
+### Voice Commands
+- Activate system feature hands-free using voice
+- Supports wake word "Hey Guide" for instant activation
+- Converts speech to text using **Gorq STT**
+- Determines appropriate action with **Groq LLaMa**
+
 
 ### Shared Infrastructure
 - Clean, modular structure for easy integration with the Project NewSight mobile frontend
@@ -54,13 +64,16 @@ CIS4398-Project-NewSight-Backend/
 │   ├── routes/
 │   │   ├── __init__.py
 │   │   ├── contacts.py          # CRUD endpoints for emergency contacts
-│   │   ├── emergency_alert.py  # Endpoint for sending emergency alerts
+│   │   ├── emergency_alert.py   # Endpoint for sending emergency alerts
 │   │   ├── sms_routes.py        # SMS endpoint
 │   │   └── familiar_face.py     # Face recognition WebSocket handlers
+│   │   └── voice_routes.py      # CRUD endpoints for voice commands
 │   │
 │   └── services/
 │       ├── sms_service.py       # Handles Vonage SMS integration
-│       └── contact_lookup.py   # Contact lookup service
+│       └── contact_lookup.py    # Contact lookup service
+│       └── voice_agent.py       # Decides which feature to use based on user's command
+│       └── voice_service.py     # Translates user's speech to text
 │
 ├── .env                         # Environment variables (not committed)
 ├── .gitignore
@@ -108,6 +121,7 @@ S3_PREFIX=familiar_img/
 VONAGE_API_KEY=your-vonage-key
 VONAGE_API_SECRET=your-vonage-secret
 VONAGE_FROM_NUMBER=your-vonage-phone
+GROQ_API_KEY= your-groq-key
 ```
 
 ---
@@ -175,6 +189,27 @@ uvicorn app.main:app --reload
 }
 ```
 
+### Voice Command Endpoints
+
+**POST** `/voice/wake-word` - looks for the wake word "Hey, Guide"
+
+**POST** `/voice/transcribe` - Detectes which feature to use in JSON Format
+
+ **Response Format:**
+ ```json
+ sub_features is only for some features
+ {
+  "confidence":0.0-1.0,
+  "extracted_params": {
+    "feature":"Feature Name",
+    "destination":"Only for Navigation",
+    "query":"What user said",
+    "sub_features":["HAPTIC_FEEDBACK","OBJECT_DETECTION","TRANSIT_ASSIST"]},
+  "TTS_Output": {
+    "message": "Processing your request"
+  }
+ }
+``` 
 ---
 
 ## Additional Instructions
@@ -251,9 +286,10 @@ adb -s <device_serial> reverse --remove tcp:8000
 
 ### Feature Independence
 
-Both features are designed to run independently:
+Features are designed to run independently:
 - **Emergency Contact** routes are prefixed and organized under `/contacts`, `/emergency_alert`, `/sms`
 - **Familiar Face Detection** uses WebSocket endpoints at `/ws` and `/ws/verify`
+- **Voice Commands** routes are prefixed and organized under `/voice/wake-word`, `/voice/transcribe`
 - No route conflicts or overlapping functionality
 - Shared infrastructure (CORS, static files, database) is unified
 
@@ -278,10 +314,11 @@ Both features are designed to run independently:
 - **WebSocket** - Real-time bidirectional communication
 - **Boto3** - AWS SDK for Python
 - **Pydantic** - Data validation
-- **gTTS** - Text-to-speech (for future features)
+- **gTTS** - Text-to-speech
+- **llama-3.1-8b-instant** - For LLM to Detect Features for Voice Command
 
 ---
 
 ## Development
 
-The unified backend maintains clean separation between features while sharing common infrastructure. Both features can be developed and tested independently, and the modular structure makes it easy to extend with additional features in the future.
+The unified backend maintains clean separation between features while sharing common infrastructure. Features can be developed and tested independently, and the modular structure makes it easy to extend with additional features in the future.
