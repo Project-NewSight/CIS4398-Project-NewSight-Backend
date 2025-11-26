@@ -18,8 +18,10 @@ source .venv/bin/activate
 2) Install minimal runtime dependencies (recommended):
 
 ```bash
+
+# Upgrade packaging and install core deps (Pillow removed)
 python3 -m pip install --upgrade pip setuptools wheel
-python3 -m pip install opencv-python numpy Pillow
+python3 -m pip install opencv-python numpy
 # CPU PyTorch wheel (recommended for EasyOCR speed)
 python3 -m pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision torchaudio
 python3 -m pip install easyocr
@@ -123,6 +125,55 @@ Files of interest
 - `text_detection.py` — TextDetector class (EasyOCR wrapper)
 - `test_local.py` — CLI for testing on single images
 
+---
+
+## Environment Variables (WebSocket server)
+
+These configure `main_ws.py` when you run it with Uvicorn.
+
+- `MIN_CONF`: Minimum confidence for a detection to be considered. Lower values accept more detections but may introduce noise.
+   - Example: `MIN_CONF=0.6`
+
+- `STABILITY_WINDOW`: Number of recent frames to consider for stability (rolling buffer size).
+   - Example: `STABILITY_WINDOW=5`
+
+- `STABILITY_COUNT`: Minimum occurrences of the same (normalized) text within the window to declare a stable phrase.
+   - Example: `STABILITY_COUNT=3`
+
+- `WS_RAW_DIR`: Output directory for saved frames (raw/annotated). Defaults to `ws_raw`.
+   - Example: `WS_RAW_DIR=ws_raw`
+
+-
+
+### Recommended presets
+
+- Fast lock (more jitter risk):
+   ```zsh
+   MIN_CONF=0.55 STABILITY_WINDOW=4 STABILITY_COUNT=2 uvicorn main_ws:app --host 0.0.0.0 --port 8000
+   ```
+
+- Faster/steadier:
+   ```zsh
+   MIN_CONF=0.6 STABILITY_WINDOW=5 STABILITY_COUNT=2 uvicorn main_ws:app --host 0.0.0.0 --port 8000
+   ```
+
+- Balanced:
+   ```zsh
+   MIN_CONF=0.65 STABILITY_WINDOW=6 STABILITY_COUNT=3 uvicorn main_ws:app --host 0.0.0.0 --port 8000
+   ```
+
+### Running the WebSocket server
+
+Ensure the virtual environment is activated and dependencies are installed (`fastapi`, `uvicorn[standard]`, `easyocr`, `opencv-python`, `numpy`). Then run:
+
+```zsh
+source .venv/bin/activate
+uvicorn main_ws:app --host 0.0.0.0 --port 8000
+```
+
+WebSocket endpoint: `ws://<host>:8000/ws`
+
+
 License: MIT-style (project-specific license not included)
 # Text Detection for Street Signs
 
@@ -179,7 +230,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 
 # Or install individually:
-pip install opencv-python numpy pillow easyocr
+pip install opencv-python numpy easyocr
 ```
 
 **Note:** First installation may take a few minutes.
@@ -318,7 +369,7 @@ detector = TextDetector(gpu=True)
 
 - `opencv-python` - Image processing
 - `numpy` - Numerical operations
-- `pillow` - Image handling
+-- (Pillow was optional and has been removed from this project's requirements)
 - `easyocr` - Text detection and recognition
 
 See `requirements.txt` for specific versions.
