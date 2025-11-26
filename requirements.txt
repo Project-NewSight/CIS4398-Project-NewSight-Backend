@@ -1,13 +1,18 @@
 psycopg2-binary==2.9.9
 python-dotenv==1.0.0
 
-# Text Detection Dependencies (Backend Only)
+# Text Detection Core
 opencv-python==4.8.1.78
 numpy==1.24.3
-# Text Detection Dependencies (Backend Only)
-opencv-python==4.8.1.78
-numpy==1.24.3
-
-# OCR Engine - EasyOCR for street sign text detection
 easyocr==1.7.1
+
+# WebSocket API Server
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+
+# Optional: CPU-only PyTorch for better EasyOCR performance
+# If you install via README instructions, you may pin via index URL instead
+# torch
+# torchvision
+# torchaudio
 

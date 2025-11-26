@@ -15,7 +15,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-2) Install minimal runtime dependencies (recommended):
+2) Install minimal runtime dependencies in the venv (recommended):
 
 ```bash
 
@@ -25,6 +25,8 @@ python3 -m pip install opencv-python numpy
 # CPU PyTorch wheel (recommended for EasyOCR speed)
 python3 -m pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision torchaudio
 python3 -m pip install easyocr
+ # WebSocket server
+ python3 -m pip install fastapi 'uvicorn[standard]'
 ```
 
 If you prefer to install everything from `requirements.txt`, run:
