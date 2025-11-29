@@ -74,7 +74,7 @@ async def process_voice_command(
             return {
                 "confidence": 0.0,
                 "extracted_params": {
-                    "feature": None,
+                    "feature": "None",
                     "query": ""
                 },
                 "TTS_Output": {
@@ -184,7 +184,7 @@ async def process_voice_command(
             response_data = {
                 "confidence": 0.0,
                 "extracted_params": {
-                    "feature": None,
+                    "feature": "NONE",
                     "query": text
                 },
                 "TTS_Output": {
@@ -202,7 +202,7 @@ async def process_voice_command(
         return {
             "confidence": 0.0,
             "extracted_params": {
-                "feature": None,
+                "feature": "NONE",
                 "query": "",
                 "error": str(e)
             },
