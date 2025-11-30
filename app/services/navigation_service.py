@@ -735,7 +735,7 @@ class NavigationService:
         
         return stops[0] if stops else None
     
-    def _transit_get_service_alerts(self, route_ids: Set[str], lat: float, lon: float) -> List[Dict]:
+    def _transit_get_service_alerts(self, route_ids: set[str], lat: float, lon: float) -> List[Dict]:
         """Get service alerts (delays/cancellations) for a set of route IDs near a point."""
         if not TRANSIT_API_KEY or not route_ids:
             return []
