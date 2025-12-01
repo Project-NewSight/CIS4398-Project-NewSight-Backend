@@ -823,7 +823,7 @@ class NavigationService:
             print(f"Error calling TransitApp plan: {e}")
             return None
         
-        if resp.status_code != 0:
+        if resp.status_code != 200:
             print(f"TransitApp plan error: {resp.status_code}")
             print(resp.text)
             return None
