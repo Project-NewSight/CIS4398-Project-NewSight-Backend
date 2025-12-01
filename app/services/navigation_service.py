@@ -383,7 +383,7 @@ class NavigationService:
         Returns:
             Dictionary with navigation (walking or transit)
         """
-        WALKING_TIME_THRESHOLD = 2700  # 45 minutes in seconds
+        WALKING_TIME_THRESHOLD = 1800  # 30 minutes in seconds
         
         print(f"🧠 Smart navigation: Analyzing route from ({origin_lat}, {origin_lng}) to {destination}")
         
