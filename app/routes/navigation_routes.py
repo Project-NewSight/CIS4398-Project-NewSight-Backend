@@ -6,12 +6,50 @@ API endpoints and WebSocket for real-time turn-by-turn navigation
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException
 from app.services.navigation_service import NavigationService
 from app.routes.location_routes import get_user_location
+from app.schemas import (
+    DirectionsRequest,
+    TransitRoutesRequest,
+    UpdateLocationRequest,
+    DirectionsResponse,
+    NavigationUpdate,
+)
 import json
 
 router = APIRouter(prefix="/navigation", tags=["Navigation"])
 
 # Initialize navigation service
 nav_service = NavigationService()
+
+@router.post("/directions", response_model=DirectionsResponse)
+async def get_directions(body: DirectionsRequest):
+    """
+    Get walking directions without starting a full navigation session
+    """
+    try:
+        data = nav_service.get_directions(
+            origin_lat=body.origin_lat,
+            origin_lng=body.origin_lng,
+            destination=body.destination,
+        )
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/transit-routes")
+async def get_transit_routes(body: TransitRoutesRequest):
+    """
+    Get transit routes (bus/train) using Transit API + Google Maps
+    """
+    try:
+        data = nav_service.get_transit_routes(
+            origin_lat=body.origin_lat,
+            origin_lng=body.origin_lng,
+            destination=body.destination,
+            mode=body.mode,
+        )
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("/start")
