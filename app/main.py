@@ -11,6 +11,7 @@ from app.routes import familiar_face
 from app.routes import voice_routes
 from app.routes import location_routes
 from app.routes import navigation_routes
+
 # from app.routes import object_detection_backend
 
 app = FastAPI(
@@ -50,6 +51,11 @@ app.include_router(navigation_routes.router)
 # Register WebSocket routes directly to maintain original paths (/ws, /ws/verify)
 app.websocket("/ws")(familiar_face.ws_verify)
 app.websocket("/ws/verify")(familiar_face.ws_verify)
+
+# Navigation Feature Routes
+app.include_router(location_routes.router)
+app.include_router(navigation_routes.router)
+
 
 @app.get("/")
 def root():
