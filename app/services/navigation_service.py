@@ -361,6 +361,86 @@ class NavigationService:
         return directions
     
     
+    def get_transit_navigation(self, session_id: str, origin_lat: float, origin_lng: float, destination: str, mode: str = "all") -> dict:
+        """
+        Combined transit + walking navigation:
+        1. Find nearest bus/train stop to reach destination
+        2. Start walking navigation TO that stop
+        3. Return both walking directions and transit options
+        
+        Args:
+            session_id: Unique session identifier
+            origin_lat: Starting latitude
+            origin_lng: Starting longitude
+            destination: Final destination (e.g., "Temple University")
+            mode: "all", "bus", or "train"
+        
+        Returns:
+            Dictionary with:
+                - directions: Walking directions to nearest bus stop
+                - transit_info: Transit routes, schedules, alerts
+                - nearest_stop: Bus stop details
+        """
+        print(f"🚌 Getting transit navigation from ({origin_lat}, {origin_lng}) to {destination}")
+        
+        # Step 1: Get transit routes (finds nearest stop + transit options)
+        try:
+            transit_data = self.get_transit_routes(origin_lat, origin_lng, destination, mode)
+        except Exception as e:
+            # If transit API fails, fall back to walking navigation
+            print(f"⚠️  Transit API failed, falling back to walking: {str(e)}")
+            return self.start_navigation(session_id, origin_lat, origin_lng, destination)
+        
+        nearest_stop = transit_data.get("origin_stop", {})
+        stop_name = nearest_stop.get("name", "transit stop")
+        stop_lat = nearest_stop.get("lat")
+        stop_lng = nearest_stop.get("lng")
+        
+        if not stop_lat or not stop_lng:
+            print(f"⚠️  No valid stop coordinates, falling back to walking")
+            return self.start_navigation(session_id, origin_lat, origin_lng, destination)
+        
+        print(f"✅ Found nearest stop: {stop_name} at ({stop_lat}, {stop_lng})")
+        
+        # Step 2: Get walking directions TO the bus stop
+        walking_directions = self.get_directions(origin_lat, origin_lng, f"{stop_lat},{stop_lng}")
+        
+        # Step 3: Store navigation state (walking to bus stop)
+        self.active_navigations[session_id] = {
+            "destination": stop_name,
+            "final_destination": transit_data["destination"]["text"],
+            "steps": walking_directions["steps"],
+            "current_step_index": 0,
+            "total_steps": len(walking_directions["steps"]),
+            "status": "walking_to_stop",
+            "last_announcement": None,
+            "last_announced_distance": None,
+            "transit_info": {
+                "stop": nearest_stop,
+                "options": transit_data.get("options", []),
+                "alerts": transit_data.get("alerts", []),
+                "destination": transit_data.get("destination", {}),
+            }
+        }
+        
+        print(f"🗺️  Transit navigation started: Walking to {stop_name}, then transit to {transit_data['destination']['text']}")
+        
+        # Return combined response
+        return {
+            "status": "success",
+            "navigation_type": "transit",
+            "destination": transit_data["destination"]["text"],
+            "nearest_stop": nearest_stop,
+            "directions": walking_directions,
+            "transit_info": {
+                "options": transit_data.get("options", []),
+                "alerts": transit_data.get("alerts", []),
+                "destination": transit_data.get("destination", {}),
+            },
+            "message": f"Walking to {stop_name}. Transit options available when you arrive."
+        }
+    
+    
     def update_location(self, session_id: str, current_lat: float, current_lng: float) -> dict:
         """
         Process user's new location and return navigation update

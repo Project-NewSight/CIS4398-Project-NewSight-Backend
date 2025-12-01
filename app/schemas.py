@@ -123,3 +123,52 @@ class UpdateLocationRequest(BaseModel):
 
 class StopNavigationRequest(BaseModel):
     session_id: str
+
+
+# ==================== Transit Navigation Models ====================
+
+class TransitStop(BaseModel):
+    name: str
+    lat: float
+    lng: float
+    distance_m: int
+
+
+class TransitLeg(BaseModel):
+    type: str  # "walk" or "transit"
+    duration_min: Optional[int] = None
+    distance_m: Optional[int] = None
+    mode_name: Optional[str] = None  # For transit: "Bus", "Train", etc.
+    route_short_name: Optional[str] = None  # For transit: "23", "R5", etc.
+    route_long_name: Optional[str] = None  # For transit: full route name
+    departure_status: Optional[dict] = None  # Status info (on_time, delayed, cancelled)
+
+
+class TransitOption(BaseModel):
+    duration_min: Optional[int] = None
+    start_time: Optional[int] = None
+    end_time: Optional[int] = None
+    legs: List[TransitLeg]
+
+
+class TransitAlert(BaseModel):
+    type: str  # "DELAY", "CANCELLED", etc.
+    route: str
+    message: str
+    delay_minutes: Optional[int] = None
+
+
+class TransitInfo(BaseModel):
+    options: List[TransitOption]
+    alerts: List[TransitAlert]
+    destination: dict
+
+
+class TransitNavigationResponse(BaseModel):
+    status: str
+    navigation_type: str  # "transit"
+    destination: str
+    nearest_stop: TransitStop
+    directions: DirectionsResponse  # Walking directions to stop
+    transit_info: TransitInfo
+    message: str
