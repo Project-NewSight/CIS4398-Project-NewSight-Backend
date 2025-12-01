@@ -30,6 +30,10 @@ async def websocket_endpoint(websocket: WebSocket):
 
     # Per-connection buffer of (text, confidence) from last N frames
     recent_buffer = deque(maxlen=STABILITY_WINDOW)
+    
+    # Track consecutive empty frames to clear buffer
+    consecutive_empty_frames = 0
+    CLEAR_BUFFER_THRESHOLD = 3  # Clear buffer after 3 consecutive frames with no text
 
     while True:
         try:
@@ -108,10 +112,19 @@ async def websocket_endpoint(websocket: WebSocket):
             # (annotated save moved down) -- previously saved every frame with detections
 
             # Append aggregated normalized full-text + avg confidence to recent buffer
+            # Clear buffer if we've had too many consecutive empty frames (resets for new detections)
             if norm:
                 recent_buffer.append((norm, avg_conf))
+                consecutive_empty_frames = 0  # Reset counter on successful detection
             else:
-                recent_buffer.append(("", 0.0))
+                consecutive_empty_frames += 1
+                if consecutive_empty_frames >= CLEAR_BUFFER_THRESHOLD:
+                    if len(recent_buffer) > 0:
+                        print(f"  🧹 Clearing buffer after {consecutive_empty_frames} empty frames")
+                        recent_buffer.clear()
+                    consecutive_empty_frames = 0  # Reset counter
+                else:
+                    recent_buffer.append(("", 0.0))
 
             # Compute consensus in recent buffer
             texts = [t for t, c in recent_buffer if t]
@@ -181,12 +194,15 @@ async def websocket_endpoint(websocket: WebSocket):
             # except Exception as _e:
             #     print("Warning: failed to save stable annotated frame:", _e)
 
-            print(f" {feature}: stable={stable_text} (buffer_size={len(recent_buffer)}, window={STABILITY_WINDOW}, need={STABILITY_COUNT}, min_conf={MIN_CONF})")
+            # Determine what text to send to frontend
+            text_to_send = stable_text if stable_text else full_text
+            
+            print(f" {feature}: stable={stable_text} | full={full_text} | sending='{text_to_send}' (buffer={len(recent_buffer)}/{STABILITY_WINDOW}, need={STABILITY_COUNT}, conf>={MIN_CONF})")
 
             # Send results BACK to Android (include per-frame words + aggregated full_text + stability info)
             # Frontend expects "text_string" and "detections" fields
-            await websocket.send_text(json.dumps({
-                "text_string": stable_text if stable_text else full_text,  # Frontend looks for this
+            response = {
+                "text_string": text_to_send,  # Frontend looks for this
                 "detections": per_frame_results,  # Frontend looks for this array
                 # Keep backward compatibility
                 "feature": feature,
@@ -195,7 +211,9 @@ async def websocket_endpoint(websocket: WebSocket):
                 "results": results_filtered,
                 "count": len(results_filtered),
                 "stable_text": stable_text
-            }))
+            }
+            
+            await websocket.send_text(json.dumps(response))
         
         except Exception as e:
             print(" Error:", e)
