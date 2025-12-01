@@ -25,8 +25,8 @@ async def websocket_endpoint(websocket: WebSocket):
     # Stability parameters (buffer window and required count)
     # STABILITY_WINDOW: how many recent frames to consider
     # STABILITY_COUNT: minimum occurrences of same text in the window to be considered stable
-    STABILITY_WINDOW = int(os.environ.get("STABILITY_WINDOW", "5"))
-    STABILITY_COUNT = int(os.environ.get("STABILITY_COUNT", "3"))
+    STABILITY_WINDOW = int(os.environ.get("STABILITY_WINDOW", "3"))  # Reduced from 5 for faster response
+    STABILITY_COUNT = int(os.environ.get("STABILITY_COUNT", "2"))    # Reduced from 3 for faster response
 
     # Per-connection buffer of (text, confidence) from last N frames
     recent_buffer = deque(maxlen=STABILITY_WINDOW)
