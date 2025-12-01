@@ -113,12 +113,14 @@ async def process_voice_command(
         print(f"🤖 Agent response: {filtered_response}")
 
         # ===== NAVIGATION INTEGRATION =====
-        # If voice agent identified NAVIGATION, pull destination and use smart navigation
+        # If voice agent identified NAVIGATION, check if user wants transit or walking
         if agent_response.get("feature") == "NAVIGATION" and x_session_id:
             destination = filtered_response.get("destination")
+            sub_features = filtered_response.get("sub_features", [])
             
             if destination:
                 print(f"🗺️  NAVIGATION feature detected - destination: '{destination}'")
+                print(f"🎯 Sub-features: {sub_features}")
                 
                 # Get user location from location WebSocket storage
                 location = get_user_location(x_session_id)
@@ -127,35 +129,68 @@ async def process_voice_command(
                     try:
                         print(f"📍 Got location: ({location['latitude']}, {location['longitude']})")
                         
-                        # Use SMART NAVIGATION - automatically decides walking vs transit based on distance
-                        print(f"🧠 Using smart navigation (auto-detects if transit needed)")
+                        # Check if user explicitly requested TRANSIT
+                        use_transit = "TRANSIT_ASSIST" in sub_features
                         
-                        result = nav_service.get_smart_navigation(
-                            session_id=x_session_id,
-                            origin_lat=location["latitude"],
-                            origin_lng=location["longitude"],
-                            destination=destination
-                        )
-                        
-                        nav_type = result.get("navigation_type", "walking")
-                        print(f"✅ Smart navigation returned: {nav_type}")
-                        
-                        # Add result to response
-                        filtered_response["directions"] = result.get("directions")
-                        filtered_response["navigation_type"] = nav_type
-                        
-                        # Add transit info if it's a transit route
-                        if nav_type == "transit":
+                        if use_transit:
+                            print(f"🚌 User explicitly requested TRANSIT - using transit navigation")
+                            
+                            # Determine transit mode from query
+                            mode = "all"
+                            query_lower = filtered_response.get("query", "").lower()
+                            if "bus" in query_lower:
+                                mode = "bus"
+                            elif any(word in query_lower for word in ["train", "subway", "metro", "rail"]):
+                                mode = "train"
+                            
+                            # Get transit navigation (walking to stop + transit route)
+                            result = nav_service.get_transit_navigation(
+                                session_id=x_session_id,
+                                origin_lat=location["latitude"],
+                                origin_lng=location["longitude"],
+                                destination=destination,
+                                mode=mode
+                            )
+                            
+                            print(f"✅ Transit navigation started")
+                            
+                            # Add transit info to response
+                            filtered_response["directions"] = result.get("directions")
                             filtered_response["transit_info"] = result.get("transit_info")
                             filtered_response["nearest_stop"] = result.get("nearest_stop")
-                        
-                        return {
-                            "confidence": agent_response.get("confidence", 0.0),
-                            "extracted_params": filtered_response,
-                            "TTS_Output": {
-                                "message": result.get("message", "Starting navigation")
+                            filtered_response["navigation_type"] = "transit"
+                            
+                            return {
+                                "confidence": agent_response.get("confidence", 0.0),
+                                "extracted_params": filtered_response,
+                                "TTS_Output": {
+                                    "message": result.get("message", "Starting transit navigation")
+                                }
                             }
-                        }
+                        else:
+                            print(f"🚶 User wants WALKING navigation")
+                            
+                            # Start regular walking navigation
+                            directions = nav_service.start_navigation(
+                                session_id=x_session_id,
+                                origin_lat=location["latitude"],
+                                origin_lng=location["longitude"],
+                                destination=destination
+                            )
+                            
+                            print(f"✅ Walking navigation started to: {directions['destination']}")
+                            
+                            # Add directions to response
+                            filtered_response["directions"] = directions
+                            filtered_response["navigation_type"] = "walking"
+                            
+                            return {
+                                "confidence": agent_response.get("confidence", 0.0),
+                                "extracted_params": filtered_response,
+                                "TTS_Output": {
+                                    "message": f"Starting walking navigation to {directions['destination']}"
+                                }
+                            }
                     
                     except Exception as nav_error:
                         print(f"❌ Navigation error: {str(nav_error)}")
