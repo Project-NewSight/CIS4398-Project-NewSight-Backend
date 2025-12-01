@@ -33,7 +33,7 @@ async def websocket_endpoint(websocket: WebSocket):
     
     # Track consecutive empty frames to clear buffer
     consecutive_empty_frames = 0
-    CLEAR_BUFFER_THRESHOLD = 3  # Clear buffer after 3 consecutive frames with no text
+    CLEAR_BUFFER_THRESHOLD = 2  # Clear buffer after 2 consecutive frames with no text (more aggressive)
 
     while True:
         try:
