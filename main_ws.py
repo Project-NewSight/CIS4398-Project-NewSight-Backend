@@ -184,7 +184,11 @@ async def websocket_endpoint(websocket: WebSocket):
             print(f" {feature}: stable={stable_text} (buffer_size={len(recent_buffer)}, window={STABILITY_WINDOW}, need={STABILITY_COUNT}, min_conf={MIN_CONF})")
 
             # Send results BACK to Android (include per-frame words + aggregated full_text + stability info)
+            # Frontend expects "text_string" and "detections" fields
             await websocket.send_text(json.dumps({
+                "text_string": stable_text if stable_text else full_text,  # Frontend looks for this
+                "detections": per_frame_results,  # Frontend looks for this array
+                # Keep backward compatibility
                 "feature": feature,
                 "per_frame_words": per_frame_results,
                 "full_text": full_text,
