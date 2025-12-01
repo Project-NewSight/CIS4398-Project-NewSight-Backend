@@ -14,7 +14,7 @@ blinker==1.9.0
 boto3==1.40.64
 botocore==1.40.64
 cachetools==6.2.1
-certifi==2025.10.5
+#certifi>=2023.7.22
 cffi==2.0.0
 charset-normalizer==3.4.4
 click==8.1.8
@@ -39,23 +39,23 @@ gTTS==2.5.4
 gunicorn==23.0.0
 h11==0.16.0
 h5py==3.15.1
-idna==3.11
+# idna==3.11
 itsdangerous==2.2.0
 Jinja2==3.1.6
 jmespath==1.0.1
 joblib==1.5.2
-keras==2.11.0
+keras>=2.15.0          # match TF 2.20+
 libclang==18.1.1
 lz4==4.4.4
 Markdown==3.9
 markdown-it-py==4.0.0
 MarkupSafe==3.0.3
 mdurl==0.1.2
-ml-dtypes==0.3.2
+# ml-dtypes==0.3.2      # skip: not built for Python 3.13 yet
 mtcnn==1.0.0
 multidict==6.7.0
 namex==0.1.0
-numpy==1.26.0
+numpy>=2.1.3
 oauthlib==3.3.1
 opencv-python==4.11.0.86
 opencv-python-headless==4.8.1.78
@@ -65,7 +65,7 @@ packaging==25.0
 pandas==2.3.3
 pillow==12.0.0
 propcache==0.4.1
-protobuf==3.19.6
+protobuf>=5.28.0       # align with TF 2.20
 psycopg2-binary==2.9.11
 pyasn1==0.6.1
 pyasn1_modules==0.4.2
@@ -79,7 +79,7 @@ python-dateutil==2.9.0.post0
 python-dotenv==1.0.1
 python-multipart==0.0.20
 pytz==2025.2
-requests==2.32.5
+#requests==2.32.5
 requests-oauthlib==2.0.0
 retina-face==0.0.17
 rich==14.2.0
@@ -91,12 +91,18 @@ soupsieve==2.8
 SQLAlchemy==2.0.44
 srt==3.5.3
 starlette==0.48.0
-tensorboard==2.11.2
-tensorboard-data-server==0.6.1
+
+# --- TensorFlow & ML stack (modernized for 3.13) ---
+tensorflow==2.20.0
+tensorboard==2.20.0
+tensorboard-data-server==0.7.2
 tensorboard-plugin-wit==1.8.1
-tensorflow==2.11.1
-tensorflow-estimator==2.11.0
-tensorflow-io-gcs-filesystem==0.37.1
+# tensorflow-estimator merged into TF ≥2.15
+# tensorflow-io-gcs-filesystem auto-installed
+# ml-dtypes skipped for Win + 3.13
+# tempfile38 removed (built-in module)
+# ---------------------------------------------------
+
 termcolor==3.2.0
 tqdm==4.67.1
 twilio==9.8.4
@@ -105,6 +111,8 @@ typing_extensions==4.15.0
 tzdata==2025.2
 urllib3==2.5.0
 uvicorn==0.37.0
+
+# --- Vonage SDK packages ---
 vonage==4.7.2
 vonage-account==1.1.1
 vonage-application==2.0.1
@@ -124,6 +132,17 @@ vonage-verify==2.1.0
 vonage-verify-legacy==1.0.1
 vonage-video==1.5.1
 vonage-voice==1.4.0
+# ---------------------------------
+
 Werkzeug==3.1.3
 wrapt==1.17.3
 yarl==1.22.0
+#roboflow==1.1.30
+
+# --- Dev & testing tools ---
+pytest==8.3.3
+httpx==0.27.0
+black==24.10.0
+isort==5.13.2
+roboflow
+paddleocr

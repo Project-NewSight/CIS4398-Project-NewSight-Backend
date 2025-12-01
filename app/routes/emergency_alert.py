@@ -14,7 +14,7 @@ load_dotenv(dotenv_path=env_path, override=True)
 
 AWS_REGION = os.getenv("AWS_REGION")
 BUCKET_NAME = os.getenv("AWS_S3_BUCKET_NAME")
-FOLDER_NAME = os.getenv("AWS_S3_FOLDER_NAME")
+FOLDER_NAME = os.getenv("AWS_S3_FOLDER_EMERGENCY")
 
 if not all([
     os.getenv("AWS_ACCESS_KEY_ID"),
