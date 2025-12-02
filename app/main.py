@@ -14,7 +14,7 @@ from app.routes import navigation_routes
 from app.routes import text_detection_routes
 from app.routes import unified_websocket
 from app import auth
-app.include_router(auth.router)
+
 
 # from app.routes import object_detection_backend
 
@@ -38,6 +38,10 @@ app.add_middleware(
 # app.mount("/temp_photos", StaticFiles(directory="temp_photos"), name="temp_photos")
 
 # Include routers for features
+
+# Auth Route
+app.include_router(auth.router)
+
 # Emergency Contact Feature Routes
 app.include_router(sms_routes.router)
 app.include_router(contacts.router)

@@ -17,11 +17,14 @@ class EmergencyContactOut(BaseModel):
 
 class UserCreate(BaseModel):
     email: EmailStr
+    name: str
     password: str
 
+
 class Userout(BaseModel):
-    id: int
+    user_id:int
     email: EmailStr
+    name:str
 
     class Config:
         from_attributes = True

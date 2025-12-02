@@ -21,6 +21,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 def get_password_hash(password: str) -> str:
+    password = password[:72]
     return pwd_context.hash(password)
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -43,16 +44,17 @@ def get_current_user(
 
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: str | None = payload.get("sub")
-        if user_id is None:
+        email: str | None = payload.get("sub")
+        if email is None:
             raise credentials_exception
     except JWTError:
         raise credentials_exception
 
-    user = db.query(models.User).get(int(user_id))
+    user = db.query(models.User).filter(models.User.email == email).first()
     if user is None:
         raise credentials_exception
     return user
+
 
 @router.post("/register", response_model=Userout)
 def register(user_in: UserCreate, db: Session = Depends(get_db)):
@@ -62,6 +64,7 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
 
     user = models.User(
         email=user_in.email,
+        name=user_in.name,
         hashed_password=get_password_hash(user_in.password),
     )
     db.add(user)
@@ -77,7 +80,7 @@ def login(
     user = db.query(models.User).filter(models.User.email == form_data.username).first()
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=400, detail="Incorrect username or password")
-    access_token = create_access_token(data={"sub": str(user.id)})
+    access_token = create_access_token(data={"sub": user.email})
     return Token(access_token=access_token)
 
 @router.get("/me", response_model=Userout)

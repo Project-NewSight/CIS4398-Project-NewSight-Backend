@@ -1,12 +1,12 @@
 #This object represents and emergency contact record in the database
-from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, func, Sequence
 from app.db import Base
 
 class EmergencyContact(Base):
     __tablename__ = "emergencycontact"
 
     contact_id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    user_id = Column(Integer,ForeignKey("users.id"), nullable=False)
+    user_id = Column(Integer, nullable=False)
     name = Column(String(100))
     phone = Column(String(20))
     relationship = Column(String(50))
@@ -15,6 +15,14 @@ class EmergencyContact(Base):
 
 class User(Base):
     __tablename__ = "users"
-    id = Column(Integer, primary_key=True, index=True)
-    email = Column(String(255), unique=True, index=True, nullable=False)
+    user_id = Column(
+        Integer,
+        Sequence("users_user_id_seq"),
+        primary_key=True,
+        index=True,
+    )
+    name = Column(String(100), nullable=True)
+    email = Column(String(255), nullable=False, unique=True, index=True)
+    phone = Column(String(20), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
     hashed_password = Column(String(255), nullable=False)
