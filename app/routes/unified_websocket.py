@@ -5,6 +5,7 @@ Supports: Familiar Face Detection and Text Detection
 """
 
 from fastapi import WebSocket, WebSocketDisconnect
+from starlette.websockets import WebSocketState
 import json
 import base64
 import cv2
@@ -62,7 +63,8 @@ async def unified_websocket_handler(websocket: WebSocket):
     current_feature = None
     text_detection_state = {
         "recent_buffer": deque(maxlen=STABILITY_WINDOW),
-        "consecutive_empty_frames": 0
+        "consecutive_empty_frames": 0,
+        "last_sent_text": ""  # Track last sent text to avoid repeating
     }
     
     # For familiar face detection, we'll delegate to the existing handler
@@ -98,7 +100,11 @@ async def unified_websocket_handler(websocket: WebSocket):
                     # Route to appropriate handler
                     if feature == "text_detection" or (current_feature == "text_detection"):
                         # Handle text detection
-                        await handle_text_detection(websocket, data, text_detection_state)
+                        try:
+                            await handle_text_detection(websocket, data, text_detection_state)
+                        except WebSocketDisconnect:
+                            # Connection closed, exit loop
+                            raise
                         continue
                     
                     elif msg_type == "frame" and "image_b64" in data:
@@ -115,6 +121,12 @@ async def unified_websocket_handler(websocket: WebSocket):
                 
                 except json.JSONDecodeError:
                     print("[Unified WS] Invalid JSON, ignoring")
+                    continue
+                except RuntimeError as e:
+                    if "close message has been sent" in str(e) or "disconnect message" in str(e):
+                        print(f"[Unified WS] Connection closed during processing")
+                        break
+                    print(f"[Unified WS] Runtime error: {e}")
                     continue
                 except Exception as e:
                     print(f"[Unified WS] Error processing text message: {e}")
@@ -153,6 +165,11 @@ async def handle_text_detection(websocket: WebSocket, data: dict, state: dict):
         "frame": "base64_encoded_image"
     }
     """
+    # Check if websocket is still connected
+    if websocket.client_state != WebSocketState.CONNECTED:
+        print(f"[Unified WS] WebSocket not connected (state: {websocket.client_state}), skipping frame")
+        raise WebSocketDisconnect(code=1000, reason="Connection not in CONNECTED state")
+    
     frame_b64 = data.get("frame")
     if not frame_b64:
         return
@@ -258,6 +275,26 @@ async def handle_text_detection(websocket: WebSocket, data: dict, state: dict):
     # Determine what text to send (prefer stable original text, fallback to current full text)
     text_to_send = stable_text_original if stable_text_original else full_text
     
+    # Get last sent text from state
+    last_sent_text = state.get("last_sent_text", "")
+    
+    # Only send if text has changed OR if we're clearing (empty text after having text)
+    # This prevents TTS from repeating the same text
+    should_send = False
+    if text_to_send and text_to_send != last_sent_text:
+        # New different text detected
+        should_send = True
+    elif not text_to_send and last_sent_text:
+        # Clear the display when no text detected after having text
+        should_send = True
+    
+    if not should_send:
+        # Skip sending - same text as before
+        return
+    
+    # Update last sent text
+    state["last_sent_text"] = text_to_send
+    
     # Prepare detections array matching frontend format
     # Ensure all values are JSON-serializable (convert numpy types to Python types)
     per_frame_results = [
@@ -280,10 +317,23 @@ async def handle_text_detection(websocket: WebSocket, data: dict, state: dict):
     }
     
     try:
-        await websocket.send_text(json.dumps(response))
-        print(f"[Unified WS] Text Detection: stable='{stable_text_original}' | full='{full_text}' | sending='{text_to_send}'")
+        # Double-check connection before sending
+        if websocket.client_state == WebSocketState.CONNECTED:
+            await websocket.send_text(json.dumps(response))
+            print(f"[Unified WS] Text Detection: stable='{stable_text_original}' | full='{full_text}' | sending='{text_to_send}'")
+        else:
+            print(f"[Unified WS] WebSocket disconnected (state: {websocket.client_state}), cannot send")
+            # Raise exception to break out of the main loop
+            raise WebSocketDisconnect(code=1000, reason="Connection closed")
+    except WebSocketDisconnect:
+        # Re-raise to be caught by main handler
+        raise
+    except RuntimeError as e:
+        if "close message has been sent" in str(e) or "disconnect message" in str(e):
+            print(f"[Unified WS] Connection closed, stopping text detection")
+            raise WebSocketDisconnect(code=1000, reason="Connection closed")
+        else:
+            print(f"[Unified WS] Error sending response: {e}")
     except Exception as e:
-        print(f"[Unified WS] Error sending response: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"[Unified WS] Unexpected error sending response: {e}")
 
