@@ -143,6 +143,23 @@ async def process_face_recognition(jpeg_bytes: bytes, websocket: WebSocket, ws_s
 
     try:
 
+        if not os.listdir(CACHE_DIR):
+            try:
+                print("[FACE] Cache empty, syncing from S3...")
+                sync_s3_faces_to_local()
+                print("[FACE] S3 sync complete, cache now:", os.listdir(CACHE_DIR))
+            except Exception as e:
+                print(f"[FACE] S3 sync failed: {e}")
+
+            # If STILL empty after sync, tell client there's no gallery
+        if not os.listdir(CACHE_DIR):
+            await websocket.send_text(json.dumps({
+                "ok": True,
+                "match": False,
+                "note": "no_gallery_in_cache"
+            }))
+            return
+
         npbuf = np.frombuffer(jpeg_bytes, dtype=np.uint8)
         img = cv2.imdecode(npbuf, cv2.IMREAD_COLOR)
         if img is None:
