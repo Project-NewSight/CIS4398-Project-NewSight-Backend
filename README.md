@@ -5,6 +5,7 @@ This backend service powers **Project NewSight**, combining features:
 2. **Familiar Face Detection** - Real-time face recognition to identify familiar contacts using DeepFace and WebSocket connections
 3. **Voice Command** - Allows users to speak through the Android phone's microphone to send voice commands to activate features. The feature can also be activated using a wake word "Hey Guide"
 4. **Voice-Activated Navigation** - Provides real-time, step-by-step walking directions with voice announcements and AR-style visual overlay, fully hands-free for visually impaired users
+5. **Text Detection (OCR)** - Real-time text detection and recognition using EasyOCR for reading street signs, labels, and environmental text
 
 ## Overview
 
@@ -13,12 +14,13 @@ The backend is built with **FastAPI** and integrates with:
 - **PostgreSQL (via SQLAlchemy)** – for managing user contact data
 - **Vonage SMS API** – for sending alerts to trusted contacts
 - **DeepFace** – for face recognition and matching
-- **WebSocket** – for real-time face recognition processing and navigation updates
+- **WebSocket** – for real-time face recognition processing, navigation updates, and text detection
 - **Groq STT** - for converting speech to text
 - **Groq llama** - for deciding which feature to execute based on user command
 - **Google Maps API** – for walking directions, place search, and real-time navigation
+- **EasyOCR** - for text detection and optical character recognition
 
-The system ensures that in an emergency, user data is safely transmitted, messages are delivered quickly, and photos are uploaded to a secure cloud location. Additionally, it provides real-time face recognition capabilities to identify familiar contacts. Users can also interact with the system via voice commands, allowing hands-free operation to trigger features including fully voice-activated turn-by-turn navigation. 
+The system ensures that in an emergency, user data is safely transmitted, messages are delivered quickly, and photos are uploaded to a secure cloud location. Additionally, it provides real-time face recognition capabilities to identify familiar contacts. Users can also interact with the system via voice commands, allowing hands-free operation to trigger features including fully voice-activated turn-by-turn navigation and text detection for reading environmental text.
 
 ---
 
@@ -58,6 +60,16 @@ The system ensures that in an emergency, user data is safely transmitted, messag
 - **Proximity Detection**: Automatically advances to the next step as you walk
 - **Voice Announcements at Key Points**: 100m, 50 feet, 25 feet before turns
 
+### Text Detection (OCR) Feature
+- **Real-Time OCR**: Detect and read text from camera feed in real-time using EasyOCR
+- **WebSocket Support**: Live text detection via WebSocket for continuous camera frame processing
+- **High Accuracy**: Uses CRAFT (Character Region Awareness For Text detection) and CRNN (Convolutional Recurrent Neural Network)
+- **Multilingual Support**: Supports 80+ languages (currently configured for English)
+- **Stability Detection**: Filters flickering results by requiring consistent text across multiple frames
+- **Confidence Thresholds**: Configurable minimum confidence for text detection
+- **Optimized Performance**: Supports GPU acceleration and frame skipping for better performance
+- **Use Cases**: Reading street signs, labels, product information, environmental text
+
 ### Shared Infrastructure
 - Clean, modular structure for easy integration with the Project NewSight mobile frontend
 - CORS middleware enabled for cross-origin requests
@@ -94,6 +106,11 @@ CIS4398-Project-NewSight-Backend/
 │       ├── voice_service.py     # Translates user's speech to text
 │       └── navigation_service.py # Google Maps integration and navigation logic
 │
+├── text_detection.py            # TextDetector class (EasyOCR wrapper)
+├── test_local.py                # CLI for testing OCR on static images
+├── live_camera.py               # Live camera OCR demo script (optional)
+├── main_ws.py                   # Standalone WebSocket server for text detection (optional)
+│
 ├── .env                         # Environment variables (not committed)
 ├── .env.example                 # Example environment variables
 ├── .gitignore
@@ -118,6 +135,8 @@ venv\Scripts\activate      # Windows
 ```bash
 pip install -r requirements.txt
 ```
+
+**Note:** First installation may take several minutes as EasyOCR downloads pretrained models (~500MB) on first run.
 
 ### 3. Environment Configuration
 
@@ -147,6 +166,12 @@ GROQ_API_KEY=your-groq-key
 
 # Google Maps API Configuration (for Navigation Feature)
 GOOGLE_MAPS_API_KEY=your-google-maps-api-key
+
+# Text Detection Configuration (Optional)
+MIN_CONF=0.6                    # Minimum confidence for OCR detections
+STABILITY_WINDOW=5              # Number of frames for stability check
+STABILITY_COUNT=3               # Minimum occurrences for stable text
+WS_RAW_DIR=ws_raw               # Directory for saved frames
 ```
 
 **Important for Navigation Feature:**
@@ -313,159 +338,65 @@ uvicorn app.main:app --reload
 
 ---
 
-## Navigation Feature Architecture
+## Text Detection (OCR) Feature
 
-### Complete Flow
-
-1. **User initiates navigation** (from any activity - Home, Communicate, Observe):
-   - User says: "Hey Guide, nearest CVS"
-   - Audio is captured and sent to `/voice/transcribe` endpoint with `X-Session-Id` header
-
-2. **Backend processing** (`voice_routes.py` acts as supervisor):
-   - Transcribes audio using Groq Whisper
-   - Voice agent identifies `NAVIGATION` feature and extracts destination ("CVS")
-   - Retrieves user's current location from `location_routes.py` storage (populated by location WebSocket)
-   - Calls `navigation_service.py` to:
-     - Clean destination (removes "nearest", "the", etc.)
-     - Detect if generic place name (CVS, Starbucks, bus stops, etc.)
-     - If generic: Use Places API to find nearest matching location
-     - If specific: Use Geocoding API to resolve address
-     - Call Directions API with origin and destination for walking route
-     - Parse and structure turn-by-turn steps
-   - Returns complete directions in response
-
-3. **Frontend receives response**:
-   - HomeActivity/CommunicateActivity/ObserveActivity receives JSON with `directions` object
-   - Launches NavigateActivity with directions passed via Intent extras
-   - NavigateActivity automatically starts navigation without user needing to speak again
-
-4. **Real-time navigation** (NavigateActivity):
-   - Opens camera for AR overlay
-   - Connects to `/navigation/ws` WebSocket with session ID
-   - Sends GPS updates every 2 seconds via location WebSocket
-   - Backend calculates:
-     - Distance to next turn using Haversine formula
-     - Whether to advance to next step (within 20 meters of turn)
-     - Whether to announce (at 100m, 50 feet, 25 feet thresholds)
-   - Frontend displays:
-     - Current instruction (e.g., "Turn right on Main St")
-     - Distance to next turn (formatted as feet/miles)
-     - Directional arrow (straight, left, right, slight left/right)
-     - Voice announcements via text-to-speech
-
-5. **Navigation completion**:
-   - When user reaches destination (within 20m), backend sends `"arrived"` status
-   - Frontend announces "You have arrived at your destination"
-   - Navigation session cleaned up
-
-### Key Design Decisions
-
-- **`voice_routes.py` as supervisor**: All voice commands route through here first, including navigation
-- **Complete directions in initial response**: User doesn't need to speak again in NavigateActivity
-- **Dual WebSocket architecture**:
-  - `/location/ws`: Continuous background GPS tracking
-  - `/navigation/ws`: Real-time turn-by-turn updates during active navigation
-- **Generic place recognition**: System understands "nearest CVS" and automatically finds closest location
-- **Distance from API, not calculations**: Display and announcements use Google Maps API distances, only internal proximity detection uses Haversine
-
----
-
-## Testing the Navigation Feature
-
-### Android App Testing
-
-1. **Backend Setup**:
-   - Start backend server on your local network:
-     ```bash
-     python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-     ```
-   - Note your local IP address (e.g., 192.168.1.254)
-
-2. **Android Setup** (if on physical device):
-   - Update WebSocket URLs in Android code to use your local IP
-   - Or use ADB port forwarding (see instructions below)
-
-3. **Test Flow**:
-   - Open app → HomeActivity/CommunicateActivity/ObserveActivity
-   - Say: "Hey Guide, nearest CVS" (or any destination)
-   - NavigateActivity should open with navigation already started
-   - Walk around to see real-time updates
-
-### Common Test Destinations
-
-- **Generic places**: "nearest CVS", "Starbucks", "bus stop", "ATM", "pharmacy"
-- **Specific places**: "Temple University", "City Hall Philadelphia"
-- **Addresses**: "1801 N Broad St, Philadelphia"
-
----
-
-## Additional Instructions
-
-### For Apple Silicon Mac Users Testing with Physical Android Device
-
-These instructions are relevant if:
-- You are using an Apple Silicon Mac
-- You are testing with a physical Android phone connected via USB to the Mac in Android Studio
-
-#### 1. Check if ADB is installed
+### Testing OCR on Static Images
 
 ```bash
-ls ~/Library/Android/sdk/platform-tools
+python test_local.py
 ```
 
-If adb exists, temporarily add it to your PATH:
+**Options:**
+1. **Test with sample image** - Auto-generates a test image with text
+2. **Test with your own image** - Provide path to your street sign or document image
+3. **Exit**
+
+### Live Camera OCR Demo (Optional)
+
+Run real-time text detection from your webcam:
 
 ```bash
-export PATH=$PATH:$HOME/Library/Android/sdk/platform-tools
+python live_camera.py --camera 0 --skip 5 --width 640 --out live_results
 ```
 
-Then confirm installation:
+**Controls:**
+- Press `q` to quit
+- Press `s` to save annotated frame
+
+**Flags:**
+- `--camera N` : Camera index (default 0)
+- `--skip N` : Process every Nth frame (default 5)
+- `--width W` : Resize width for OCR (default 640)
+- `--out DIR` : Output directory (default `live_results`)
+
+### Standalone WebSocket Server for OCR (Optional)
+
+For dedicated text detection service:
 
 ```bash
-adb version
+# With custom configuration
+MIN_CONF=0.6 STABILITY_WINDOW=5 STABILITY_COUNT=3 uvicorn main_ws:app --host 0.0.0.0 --port 8000
 ```
 
-#### 2. Connect your Android device via USB
+**WebSocket endpoint:** `ws://<host>:8000/ws`
 
-Plug the device into your Mac and run:
+### EasyOCR Technology
 
-```bash
-adb devices
-```
+- **Detection Model:** CRAFT (Character Region Awareness For Text detection)
+- **Recognition Model:** CRNN (Convolutional Recurrent Neural Network)
+- **Languages Supported:** 80+ (currently using English)
+- **Model Size:** ~500MB (downloads automatically on first run)
+- **Cache Location:** `~/.EasyOCR/model/` (Windows: `C:\Users\<username>\.EasyOCR\model\`)
 
-Expected output:
+### Performance Tips
 
-```
-List of devices attached
-2S98115AA11A2500505	device
-emulator-5554	device
-```
-
-#### 3. Set up port forwarding
-
-Run the following command to link your Mac's backend to your phone:
-
-```bash
-adb -s <device_serial> reverse tcp:8000 tcp:8000
-```
-
-For specific device (example):
-
-```bash
-adb -s 2S98115AA11A2500505 reverse tcp:8000 tcp:8000
-```
-
-Verify with:
-
-```bash
-adb -s 2S98115AA11A2500505 reverse --list
-```
-
-#### 4. (Optional) Remove port forwarding when finished
-
-```bash
-adb -s <device_serial> reverse --remove tcp:8000
-```
+1. **First run:** Slow (downloads models ~500MB)
+2. **Subsequent runs:** Fast (models cached)
+3. **Image quality:** Higher quality = better accuracy
+4. **GPU acceleration:** Available if you have NVIDIA GPU with CUDA:
+   ```python
+   detector = TextDetector(gpu=True)
+   ```
 
 ---
 
@@ -479,6 +410,7 @@ Features are designed to run independently:
 - **Voice Commands** routes are prefixed and organized under `/voice/wake-word`, `/voice/transcribe`
 - **Navigation** routes are organized under `/navigation/start` with WebSocket at `/navigation/ws`
 - **Location Tracking** uses WebSocket endpoint at `/location/ws` (shared by navigation)
+- **Text Detection** available via standalone scripts (`text_detection.py`, `test_local.py`, `live_camera.py`, `main_ws.py`)
 - No route conflicts or overlapping functionality
 - Shared infrastructure (CORS, WebSocket, database) is unified
 
@@ -510,9 +442,10 @@ While features are independent, some features work together:
 - **AWS S3** - Cloud storage for emergency photos and face recognition images
 - **Vonage API** - SMS messaging for emergency alerts
 - **DeepFace** - Face recognition library
+- **EasyOCR** - Text detection and optical character recognition
 - **OpenCV** - Image processing
 - **NumPy** - Numerical operations
-- **WebSocket** - Real-time bidirectional communication (face recognition, location tracking, navigation)
+- **WebSocket** - Real-time bidirectional communication (face recognition, location tracking, navigation, text detection)
 - **Boto3** - AWS SDK for Python
 - **Pydantic** - Data validation and serialization
 - **gTTS** - Text-to-speech
@@ -526,49 +459,55 @@ While features are independent, some features work together:
 
 ---
 
-## Troubleshooting Navigation
+## Troubleshooting
 
-### "Google Maps API error: NOT_FOUND"
+### Navigation Issues
+
+#### "Google Maps API error: NOT_FOUND"
 - **Cause**: API key not configured or APIs not enabled
 - **Fix**: 
   1. Check `.env` file has `GOOGLE_MAPS_API_KEY=your-key`
   2. Verify Directions API, Places API, and Geocoding API are enabled in Google Cloud Console
   3. Restart backend server after updating `.env`
 
-### "Location not available" or no directions returned
+#### "Location not available" or no directions returned
 - **Cause**: Location WebSocket not connected before voice command
 - **Fix**:
   1. Wait 2-3 seconds after opening app for location to initialize
   2. Check Android logs for "Location WebSocket connected"
   3. Verify location permissions are granted on device
 
-### Navigation doesn't start from voice command in other activities
-- **Cause**: Session ID not being sent or location not tracked
-- **Fix**:
-  1. Ensure `LocationWebSocketHelper` is initialized in HomeActivity/CommunicateActivity/ObserveActivity
-  2. Check that `X-Session-Id` header is included in voice request
-  3. Verify backend logs show "Location updated for [session-id]"
+### Text Detection Issues
 
-### App crashes when navigation starts
-- **Cause**: Null values in navigation update (fixed in latest code)
-- **Fix**:
-  1. Ensure you have latest NavigateActivity.java with null checks
-  2. Check that backend is sending valid `distance_to_next` values
-  3. Review Android crash logs for specific NullPointerException
+#### "No text detected" in image
+- Check image quality (lighting, focus)
+- Ensure text is clearly visible
+- Try lowering confidence threshold: `min_confidence=0.3`
+- Make sure image file exists and path is correct
 
-### Generic places not found (e.g., "nearest CVS")
-- **Cause**: Place not in generic terms list or too far away
-- **Fix**:
-  1. Search radius is 10km - ensure location is within that range
-  2. Try being more specific: "CVS Pharmacy" instead of just "CVS"
-  3. Check `navigation_service.py` logs for "identified as generic place"
+#### First run is very slow
+- This is normal - EasyOCR downloads models (~500MB)
+- Only happens once, models are cached
+- Subsequent runs are much faster
 
-### Voice announcements not working
-- **Cause**: Text-to-speech not initialized or audio permissions
-- **Fix**:
-  1. Verify `RECORD_AUDIO` permission granted
-  2. Check that TtsHelper is initialized in NavigateActivity
-  3. Test with device volume turned up
+#### Out of memory errors
+- Reduce image size before processing
+- Close other applications
+- Consider using a machine with more RAM
+- Lower the `--width` parameter in live camera mode
+
+### General Issues
+
+#### Virtual environment activation fails (Windows PowerShell)
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+#### Pip installation fails
+```bash
+python -m pip install --upgrade pip
+pip install -r requirements.txt --force-reinstall
+```
 
 ---
 

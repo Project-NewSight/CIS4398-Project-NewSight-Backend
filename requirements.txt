@@ -136,3 +136,6 @@ fastapi-cors==0.0.6
 
 # HTTP requests (for testing)
 httpx==0.25.1
+
+# Text Detection / OCR
+easyocr==1.7.1
