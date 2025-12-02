@@ -139,3 +139,11 @@ httpx==0.25.1
 
 # Text Detection / OCR
 easyocr==1.7.1
+
+# User Profile
+fastapi==0.110.0
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+SQLAlchemy==2.0.25
+python-multipart==0.0.9
+uvicorn==0.29.0

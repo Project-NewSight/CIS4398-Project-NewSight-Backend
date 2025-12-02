@@ -13,6 +13,8 @@ from app.routes import location_routes
 from app.routes import navigation_routes
 from app.routes import text_detection_routes
 from app.routes import unified_websocket
+from app import auth
+app.include_router(auth.router)
 
 # from app.routes import object_detection_backend
 

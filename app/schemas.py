@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 
 class EmergencyContactOut(BaseModel):
@@ -12,6 +12,23 @@ class EmergencyContactOut(BaseModel):
 
     class Config:
         orm_mode = True
+
+# ==================== User Profile =========================
+
+class UserCreate(BaseModel):
+    email: EmailStr
+    password: str
+
+class Userout(BaseModel):
+    id: int
+    email: EmailStr
+
+    class Config:
+        from_attributes = True
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
 
 
 # ==================== Navigation Models ====================
