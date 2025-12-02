@@ -72,8 +72,9 @@ TEXT_DETECTION triggers on:
 
 NAVIGATION triggers on:
 - "Take me to...", "Navigate to...", "How do I get to...", "Find the nearest..."
-- If user mentions transit-related words ("bus", "train", "subway", "metro"), 
+- If user explicitly mentions PUBLIC TRANSIT words ("bus", "train", "subway", "metro", "public transit"), 
   also activate TRANSIT_ASSIST.
+- If user explicitly mentions "walk" or "walking", do NOT activate TRANSIT_ASSIST.
 
 FACIAL_RECOGNITION triggers on:
 - "Who is this?", "Do I know this person?", "Identify the person in front of me."
@@ -147,6 +148,12 @@ Output: {"feature": "OBJECT_DETECTION", "confidence": 0.95, "extracted_params": 
 
 Input: "Take me to the nearest bus stop"
 Output: {"feature": "NAVIGATION", "confidence": 0.97, "extracted_params": {"destination": "nearest bus stop", "query": "Take me to the nearest bus stop", "sub_features": ["HAPTIC_FEEDBACK", "TRANSIT_ASSIST", "OBJECT_DETECTION"]}}
+
+Input: "I want to walk to Temple University"
+Output: {"feature": "NAVIGATION", "confidence": 0.95, "extracted_params": {"destination": "Temple University", "query": "I want to walk to Temple University", "sub_features": ["HAPTIC_FEEDBACK", "OBJECT_DETECTION"]}}
+
+Input: "Take the bus to Center City"
+Output: {"feature": "NAVIGATION", "confidence": 0.97, "extracted_params": {"destination": "Center City", "query": "Take the bus to Center City", "sub_features": ["HAPTIC_FEEDBACK", "TRANSIT_ASSIST", "OBJECT_DETECTION"]}}
 
 Input: "Help me, I’m in danger"
 Output: {"feature": "EMERGENCY_CONTACT", "confidence": 1.0, "extracted_params": {"query": "Help me, I’m in danger", "sub_features": ["HAPTIC_FEEDBACK"]}}

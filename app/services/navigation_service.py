@@ -4,7 +4,7 @@ Handles Google Maps integration and real-time navigation logic
 """
 
 from math import radians, sin, cos, sqrt, atan2
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set
 import googlemaps
 import os
 import re
@@ -241,72 +241,80 @@ class NavigationService:
         # 4) Fetch service alerts for those routes near origin (from transit API)
         alerts = self._transit_get_service_alerts(route_ids, origin_lat, origin_lng)
         
-        # 5) Normalize trip options for frontend consumption
+        # 5) Get ONLY the best/fastest trip option (first result is typically fastest)
         now_ts = int(time.time())
-        normalized_options = []
         
-        for trip in results:
-            duration_sec = trip.get("duration", 0) or 0
-            duration_min = duration_sec // 60 if duration_sec else None
+        if not results or len(results) == 0:
+            raise Exception("No transit routes available for this destination.")
+        
+        # Take the first (best) trip
+        best_trip = results[0]
+        duration_sec = best_trip.get("duration", 0) or 0
+        duration_min = duration_sec // 60 if duration_sec else None
+        
+        start_time = best_trip.get("start_time")
+        end_time = best_trip.get("end_time")
+        
+        legs_out = []
+        for leg in best_trip.get("legs", []) or []:
+            leg_mode = leg.get("leg_mode", "unknown")
+            leg_duration_min = (leg.get("duration", 0) // 60) if leg.get("duration") else None
             
-            start_time = trip.get("start_time")
-            end_time = trip.get("end_time")
-            
-            legs_out = []
-            for leg in trip.get("legs", []) or []:
-                leg_mode = leg.get("leg_mode", "unknown")
-                leg_duration_min = (leg.get("duration", 0) // 60) if leg.get("duration") else None
+            if leg_mode == "walk":
+                legs_out.append({
+                    "type": "walk",
+                    "distance_m": int(leg.get("distance", 0) or 0),
+                    "duration_min": leg_duration_min,
+                })
+            elif leg_mode == "transit":
+                routes = leg.get("routes", []) or []
+                departures = leg.get("departures", []) or []
+                route_info = routes[0] if routes else {}
                 
-                if leg_mode == "walk":
-                    legs_out.append({
-                        "type": "walk",
-                        "distance_m": int(leg.get("distance", 0) or 0),
-                        "duration_min": leg_duration_min,
-                    })
-                elif leg_mode == "transit":
-                    routes = leg.get("routes", []) or []
-                    departures = leg.get("departures", []) or []
-                    route_info = routes[0] if routes else {}
+                dep_status = None
+                if departures:
+                    dep = departures[0]
+                    dep_time = dep.get("departure_time")
+                    scheduled_time = dep.get("scheduled_departure_time")
+                    is_realtime = dep.get("is_real_time", False)
+                    is_cancelled = dep.get("is_cancelled", False)
                     
-                    dep_status = None
-                    if departures:
-                        dep = departures[0]
-                        dep_time = dep.get("departure_time")
-                        scheduled_time = dep.get("scheduled_departure_time")
-                        is_realtime = dep.get("is_real_time", False)
-                        is_cancelled = dep.get("is_cancelled", False)
-                        
-                        if is_cancelled:
-                            dep_status = {"status": "cancelled"}
-                        elif is_realtime and dep_time and scheduled_time:
-                            delay = (dep_time - scheduled_time) // 60
-                            if delay >= 2:
-                                dep_status = {"status": "delayed", "delay_min": int(delay)}
-                            else:
-                                dep_status = {"status": "on_time"}
-                        elif is_realtime:
-                            dep_status = {"status": "live"}
-                    
-                    legs_out.append({
-                        "type": "transit",
-                        "mode_name": route_info.get("mode_name", "Transit"),
-                        "route_short_name": route_info.get("route_short_name", ""),
-                        "route_long_name": route_info.get("route_long_name", ""),
-                        "duration_min": leg_duration_min,
-                        "departure_status": dep_status,
-                    })
-                else:
-                    legs_out.append({
-                        "type": leg_mode,
-                        "duration_min": leg_duration_min,
-                    })
-            
-            normalized_options.append({
-                "duration_min": duration_min,
-                "start_time": start_time,
-                "end_time": end_time,
-                "legs": legs_out,
-            })
+                    if is_cancelled:
+                        dep_status = {"status": "cancelled"}
+                    elif is_realtime and dep_time and scheduled_time:
+                        delay = (dep_time - scheduled_time) // 60
+                        if delay >= 2:
+                            dep_status = {"status": "delayed", "delay_min": int(delay)}
+                        else:
+                            dep_status = {"status": "on_time"}
+                    elif is_realtime:
+                        dep_status = {"status": "live"}
+                
+                legs_out.append({
+                    "type": "transit",
+                    "mode_name": route_info.get("mode_name", "Transit"),
+                    "route_short_name": route_info.get("route_short_name", ""),
+                    "route_long_name": route_info.get("route_long_name", ""),
+                    "duration_min": leg_duration_min,
+                    "departure_status": dep_status,
+                    "departure_time": dep_time,  # Unix timestamp for next bus arrival
+                    "scheduled_time": scheduled_time,  # Scheduled departure time
+                })
+            else:
+                legs_out.append({
+                    "type": leg_mode,
+                    "duration_min": leg_duration_min,
+                })
+        
+        # Create single best option
+        best_option = {
+            "duration_min": duration_min,
+            "start_time": start_time,
+            "end_time": end_time,
+            "legs": legs_out,
+        }
+        
+        print(f"✅ Selected best transit route: {duration_min} minutes total")
         
         return {
             "origin": {
@@ -324,7 +332,7 @@ class NavigationService:
                 "lng": stop_lon,
                 "distance_m": stop_distance,
             },
-            "options": normalized_options,
+            "best_option": best_option,  # Single best route instead of multiple options
             "alerts": alerts,
             "generated_at": now_ts,
         }
@@ -359,6 +367,183 @@ class NavigationService:
         print(f"🗺️  Navigation started for session {session_id}: {directions['destination']}")
         
         return directions
+    
+    
+    def get_smart_navigation(self, session_id: str, origin_lat: float, origin_lng: float, destination: str) -> dict:
+        """
+        Smart navigation that automatically decides between walking and transit:
+        1. First calculates walking route
+        2. If walking time > 45 minutes, automatically uses transit + walking to bus stop
+        3. Returns appropriate navigation based on distance
+        
+        Args:
+            session_id: Unique session identifier
+            origin_lat: Starting latitude
+            origin_lng: Starting longitude
+            destination: Final destination
+        
+        Returns:
+            Dictionary with navigation (walking or transit)
+        """
+        WALKING_TIME_THRESHOLD = 1800  # 30 minutes in seconds
+        
+        print(f"🧠 Smart navigation: Analyzing route from ({origin_lat}, {origin_lng}) to {destination}")
+        
+        # Step 1: Try walking directions first to check duration
+        try:
+            walking_directions = self.get_directions(origin_lat, origin_lng, destination)
+            walking_duration_seconds = walking_directions.get("total_duration_seconds", 0)
+            walking_duration_minutes = walking_duration_seconds // 60
+            
+            print(f"🚶 Walking route: {walking_duration_minutes} minutes ({walking_directions['total_distance']})")
+            
+            # Step 2: If walking is reasonable (≤ 45 min), use it
+            if walking_duration_seconds <= WALKING_TIME_THRESHOLD:
+                print(f"✅ Walking time acceptable ({walking_duration_minutes} min ≤ 45 min). Using walking navigation.")
+                
+                # Store navigation state for walking
+                self.active_navigations[session_id] = {
+                    "destination": walking_directions["destination"],
+                    "steps": walking_directions["steps"],
+                    "current_step_index": 0,
+                    "total_steps": len(walking_directions["steps"]),
+                    "status": "active",
+                    "last_announcement": None,
+                    "last_announced_distance": None
+                }
+                
+                # Return walking navigation
+                return {
+                    "status": "success",
+                    "navigation_type": "walking",
+                    "destination": walking_directions["destination"],
+                    "directions": walking_directions,
+                    "message": f"Starting walking navigation to {walking_directions['destination']}. {walking_duration_minutes} minute walk."
+                }
+            
+            # Step 3: Walking too long, use transit
+            print(f"🚌 Walking time too long ({walking_duration_minutes} min > 45 min). Switching to transit navigation.")
+            
+            return self.get_transit_navigation(
+                session_id=session_id,
+                origin_lat=origin_lat,
+                origin_lng=origin_lng,
+                destination=destination,
+                mode="all"
+            )
+            
+        except Exception as e:
+            print(f"⚠️ Error in smart navigation: {str(e)}")
+            # Fall back to regular walking navigation
+            return self.start_navigation(session_id, origin_lat, origin_lng, destination)
+    
+    
+    def get_transit_navigation(self, session_id: str, origin_lat: float, origin_lng: float, destination: str, mode: str = "all") -> dict:
+        """
+        Combined transit + walking navigation:
+        1. Find nearest bus/train stop to reach destination
+        2. Start walking navigation TO that stop
+        3. Return both walking directions and transit options
+        
+        Args:
+            session_id: Unique session identifier
+            origin_lat: Starting latitude
+            origin_lng: Starting longitude
+            destination: Final destination (e.g., "Temple University")
+            mode: "all", "bus", or "train"
+        
+        Returns:
+            Dictionary with:
+                - directions: Walking directions to nearest bus stop
+                - transit_info: Transit routes, schedules, alerts
+                - nearest_stop: Bus stop details
+        """
+        print(f"🚌 Getting transit navigation from ({origin_lat}, {origin_lng}) to {destination}")
+        
+        # Step 1: Get transit routes (finds nearest stop + transit options)
+        try:
+            transit_data = self.get_transit_routes(origin_lat, origin_lng, destination, mode)
+        except Exception as e:
+            # If transit API fails, fall back to walking navigation
+            print(f"⚠️  Transit API failed, falling back to walking: {str(e)}")
+            return self.start_navigation(session_id, origin_lat, origin_lng, destination)
+        
+        nearest_stop = transit_data.get("origin_stop", {})
+        stop_name = nearest_stop.get("name", "transit stop")
+        stop_lat = nearest_stop.get("lat")
+        stop_lng = nearest_stop.get("lng")
+        
+        if not stop_lat or not stop_lng:
+            print(f"⚠️  No valid stop coordinates, falling back to walking")
+            return self.start_navigation(session_id, origin_lat, origin_lng, destination)
+        
+        print(f"✅ Found nearest stop: {stop_name} at ({stop_lat}, {stop_lng})")
+        
+        # Step 2: Get walking directions TO the bus stop
+        walking_directions = self.get_directions(origin_lat, origin_lng, f"{stop_lat},{stop_lng}")
+        
+        # Get the best transit option
+        best_option = transit_data.get("best_option", {})
+        
+        # Extract route info and departure time for announcement
+        route_name = "transit"
+        departure_time = None
+        trip_duration = best_option.get("duration_min", 0)
+        
+        for leg in best_option.get("legs", []):
+            if leg.get("type") == "transit":
+                route_name = leg.get("route_short_name", "transit")
+                departure_time = leg.get("departure_time")
+                break
+        
+        # Calculate minutes until bus arrives
+        arrival_info = ""
+        if departure_time:
+            now_ts = int(time.time())
+            minutes_until = (departure_time - now_ts) // 60
+            if minutes_until > 0:
+                arrival_info = f", arriving in {minutes_until} minutes"
+        
+        # Step 3: Store navigation state (walking to bus stop)
+        self.active_navigations[session_id] = {
+            "destination": stop_name,
+            "final_destination": transit_data["destination"]["text"],
+            "steps": walking_directions["steps"],
+            "current_step_index": 0,
+            "total_steps": len(walking_directions["steps"]),
+            "status": "walking_to_stop",
+            "last_announcement": None,
+            "last_announced_distance": None,
+            "transit_info": {
+                "stop": nearest_stop,
+                "best_option": best_option,
+                "alerts": transit_data.get("alerts", []),
+                "destination": transit_data.get("destination", {}),
+            }
+        }
+        
+        print(f"🗺️  Transit navigation started: Walking to {stop_name}, then {route_name} to {transit_data['destination']['text']}")
+        
+        # Build comprehensive announcement message
+        final_dest = transit_data["destination"]["text"]
+        message = f"Walking to {stop_name}. Take {route_name}{arrival_info} to {final_dest}."
+        if trip_duration:
+            message += f" Total trip: {trip_duration} minutes."
+        
+        # Return combined response
+        return {
+            "status": "success",
+            "navigation_type": "transit",
+            "destination": final_dest,
+            "nearest_stop": nearest_stop,
+            "directions": walking_directions,
+            "transit_info": {
+                "best_option": best_option,
+                "alerts": transit_data.get("alerts", []),
+                "destination": transit_data.get("destination", {}),
+            },
+            "message": message
+        }
     
     
     def update_location(self, session_id: str, current_lat: float, current_lng: float) -> dict:
