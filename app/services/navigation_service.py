@@ -4,7 +4,7 @@ Handles Google Maps integration and real-time navigation logic
 """
 
 from math import radians, sin, cos, sqrt, atan2
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set
 import googlemaps
 import os
 import re
@@ -297,6 +297,8 @@ class NavigationService:
                     "route_long_name": route_info.get("route_long_name", ""),
                     "duration_min": leg_duration_min,
                     "departure_status": dep_status,
+                    "departure_time": dep_time,  # Unix timestamp for next bus arrival
+                    "scheduled_time": scheduled_time,  # Scheduled departure time
                 })
             else:
                 legs_out.append({
@@ -483,12 +485,24 @@ class NavigationService:
         # Get the best transit option
         best_option = transit_data.get("best_option", {})
         
-        # Extract route info for announcement
+        # Extract route info and departure time for announcement
         route_name = "transit"
+        departure_time = None
+        trip_duration = best_option.get("duration_min", 0)
+        
         for leg in best_option.get("legs", []):
             if leg.get("type") == "transit":
                 route_name = leg.get("route_short_name", "transit")
+                departure_time = leg.get("departure_time")
                 break
+        
+        # Calculate minutes until bus arrives
+        arrival_info = ""
+        if departure_time:
+            now_ts = int(time.time())
+            minutes_until = (departure_time - now_ts) // 60
+            if minutes_until > 0:
+                arrival_info = f", arriving in {minutes_until} minutes"
         
         # Step 3: Store navigation state (walking to bus stop)
         self.active_navigations[session_id] = {
@@ -510,11 +524,17 @@ class NavigationService:
         
         print(f"🗺️  Transit navigation started: Walking to {stop_name}, then {route_name} to {transit_data['destination']['text']}")
         
+        # Build comprehensive announcement message
+        final_dest = transit_data["destination"]["text"]
+        message = f"Walking to {stop_name}. Take {route_name}{arrival_info} to {final_dest}."
+        if trip_duration:
+            message += f" Total trip: {trip_duration} minutes."
+        
         # Return combined response
         return {
             "status": "success",
             "navigation_type": "transit",
-            "destination": transit_data["destination"]["text"],
+            "destination": final_dest,
             "nearest_stop": nearest_stop,
             "directions": walking_directions,
             "transit_info": {
@@ -522,7 +542,7 @@ class NavigationService:
                 "alerts": transit_data.get("alerts", []),
                 "destination": transit_data.get("destination", {}),
             },
-            "message": f"Walking to {stop_name}. Take {route_name} when you arrive."
+            "message": message
         }
     
     
