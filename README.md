@@ -1,255 +1,346 @@
-## Live Text Detection (macOS)
+# Project NewSight – Unified Backend API
 
-This repository includes a simple text detection module (`text_detection.py`) and a live camera demo script (`live_camera.py`) that uses EasyOCR to detect text from your Mac's camera in real time.
+This backend service powers **Project NewSight**, combining features:
+1. **Emergency Contact and Alert System** - Allows users to register trusted contacts and automatically send location, photo, and alert messages during emergencies
+2. **Familiar Face Detection** - Real-time face recognition to identify familiar contacts using DeepFace and WebSocket connections
+3. **Voice Command** - Allows users to speak through the Android phone's microphone to send voice commands to activate features. The feature can also be activated using a wake word "Hey Guide"
+4. **Voice-Activated Navigation** - Provides real-time, step-by-step walking directions with voice announcements and AR-style visual overlay, fully hands-free for visually impaired users
+5. **Text Detection (OCR)** - Real-time text detection and recognition using EasyOCR for reading street signs, labels, and environmental text
 
-This README explains how to set up a virtual environment, install the necessary dependencies, and run the live camera script with recommended flags and troubleshooting tips for macOS (zsh).
+## Overview
+
+The backend is built with **FastAPI** and integrates with:
+- **AWS S3** – for securely storing emergency photos and familiar face images
+- **PostgreSQL (via SQLAlchemy)** – for managing user contact data
+- **Vonage SMS API** – for sending alerts to trusted contacts
+- **DeepFace** – for face recognition and matching
+- **WebSocket** – for real-time face recognition processing, navigation updates, and text detection
+- **Groq STT** - for converting speech to text
+- **Groq llama** - for deciding which feature to execute based on user command
+- **Google Maps API** – for walking directions, place search, and real-time navigation
+- **EasyOCR** - for text detection and optical character recognition
+
+The system ensures that in an emergency, user data is safely transmitted, messages are delivered quickly, and photos are uploaded to a secure cloud location. Additionally, it provides real-time face recognition capabilities to identify familiar contacts. Users can also interact with the system via voice commands, allowing hands-free operation to trigger features including fully voice-activated turn-by-turn navigation and text detection for reading environmental text.
 
 ---
 
-## Quick start
+## Features
 
-1) Create and activate a virtual environment (recommended):
+### Emergency Contact Feature
+- Add, view, or delete trusted emergency contacts
+- Automatically send an alert (GPS + photo + message) to all trusted contacts for a user
+- Store uploaded emergency photos in **AWS S3**
+- SMS notifications via Vonage API
+
+### Familiar Face Detection Feature
+- Real-time face recognition via WebSocket connections
+- Match faces against a gallery stored in AWS S3
+- Configurable face recognition models (VGG-Face, Facenet, ArcFace, etc.)
+- Automatic synchronization of familiar faces from S3 to local cache
+- Confidence scoring and distance thresholds for matches
+
+### Voice Commands
+- Activate system features hands-free using voice
+- Supports wake word "Hey Guide" for instant activation
+- Converts speech to text using **Groq STT**
+- Determines appropriate action with **Groq LLaMa**
+- Acts as supervisor for navigation requests
+
+### Voice-Activated Navigation
+- **Hands-Free Operation**: Simply say "Hey Guide, nearest CVS" or "Give me directions to Starbucks" from any screen
+- **Smart Place Recognition**: Recognizes generic places (CVS, Starbucks, bus stops, etc.) and finds the nearest location
+- **Real-Time GPS Tracking**: Continuous location monitoring via WebSocket for accurate positioning
+- **Turn-by-Turn Voice Guidance**: Announces upcoming turns with distance (e.g., "In 50 feet, turn right on Main Street")
+- **AR-Style Visual Overlay**: Shows distance, directional arrows, and current instruction on camera feed
+- **Automatic Navigation Start**: No need to repeat the destination - navigation starts immediately when NavigateActivity opens
+- **Google Maps Integration**: 
+  - Uses Google Directions API for walking routes
+  - Places API for finding nearby locations
+  - Geocoding API for address resolution
+- **Proximity Detection**: Automatically advances to the next step as you walk
+- **Voice Announcements at Key Points**: 100m, 50 feet, 25 feet before turns
+
+### Text Detection (OCR) Feature
+- **Real-Time OCR**: Detect and read text from camera feed in real-time using EasyOCR
+- **WebSocket Support**: Live text detection via WebSocket for continuous camera frame processing
+- **High Accuracy**: Uses CRAFT (Character Region Awareness For Text detection) and CRNN (Convolutional Recurrent Neural Network)
+- **Multilingual Support**: Supports 80+ languages (currently configured for English)
+- **Stability Detection**: Filters flickering results by requiring consistent text across multiple frames
+- **Confidence Thresholds**: Configurable minimum confidence for text detection
+- **Optimized Performance**: Supports GPU acceleration and frame skipping for better performance
+- **Use Cases**: Reading street signs, labels, product information, environmental text
+
+### Shared Infrastructure
+- Clean, modular structure for easy integration with the Project NewSight mobile frontend
+- CORS middleware enabled for cross-origin requests
+- Unified API documentation via FastAPI's automatic docs
+
+---
+
+## Project Structure
+
+```
+CIS4398-Project-NewSight-Backend/
+│
+├── app/
+│   ├── __init__.py
+│   ├── db.py                    # Database connection and session
+│   ├── models.py                # SQLAlchemy models (EmergencyContact)
+│   ├── schemas.py               # Pydantic schemas (includes navigation models)
+│   ├── main.py                  # FastAPI entry point (unified app)
+│   │
+│   ├── routes/
+│   │   ├── __init__.py
+│   │   ├── contacts.py          # CRUD endpoints for emergency contacts
+│   │   ├── emergency_alert.py   # Endpoint for sending emergency alerts
+│   │   ├── sms_routes.py        # SMS endpoint
+│   │   ├── familiar_face.py     # Face recognition WebSocket handlers
+│   │   ├── voice_routes.py      # Voice command endpoints (supervisor for navigation)
+│   │   ├── location_routes.py   # Location tracking WebSocket endpoint
+│   │   └── navigation_routes.py # Navigation endpoints and WebSocket for turn-by-turn updates
+│   │
+│   └── services/
+│       ├── sms_service.py       # Handles Vonage SMS integration
+│       ├── contact_lookup.py    # Contact lookup service
+│       ├── voice_agent.py       # Decides which feature to use based on user's command
+│       ├── voice_service.py     # Translates user's speech to text
+│       └── navigation_service.py # Google Maps integration and navigation logic
+│
+├── text_detection.py            # TextDetector class (EasyOCR wrapper)
+├── test_local.py                # CLI for testing OCR on static images
+├── live_camera.py               # Live camera OCR demo script (optional)
+├── main_ws.py                   # Standalone WebSocket server for text detection (optional)
+│
+├── .env                         # Environment variables (not committed)
+├── .env.example                 # Example environment variables
+├── .gitignore
+├── requirements.txt             # Python dependencies
+└── README.md                    # Project documentation
+```
+
+---
+
+## Setup Instructions
+
+### 1. Create and Activate Virtual Environment
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
-
-2) Install minimal runtime dependencies in the venv (recommended):
-
-```bash
-
-# Upgrade packaging and install core deps (Pillow removed)
-python3 -m pip install --upgrade pip setuptools wheel
-python3 -m pip install opencv-python numpy
-# CPU PyTorch wheel (recommended for EasyOCR speed)
-python3 -m pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision torchaudio
-python3 -m pip install easyocr
- # WebSocket server
- python3 -m pip install fastapi 'uvicorn[standard]'
-```
-
-If you prefer to install everything from `requirements.txt`, run:
-
-```bash
-python3 -m pip install -r requirements.txt
-```
-
-Note: `requirements.txt` may include packages for other parts of the project (e.g., `psycopg2-binary`) that require system libs to build. If that fails, use the minimal install above.
-
-3) Run the live camera script (defaults are sensible):
-
-```bash
-source .venv/bin/activate
-python3 live_camera.py --camera 0 --skip 5 --width 640 --out live_results
-```
-
-Controls while running:
-- Press `q` to quit.
-- Press `s` to save the latest full-resolution annotated frame to `live_results/`.
-
----
-
-## Flags and tuning
-
-- `--camera N` : Camera index (default 0). Try other indices if you have multiple cameras.
-- `--skip N` : Process every Nth frame (default 5). Increasing this reduces CPU load and lag.
-- `--width W` : Resize width (in px) used for OCR (default 640). Lower values = faster OCR but coarser bounding boxes.
-- `--out DIR` : Output directory where saved annotated frames are written (default `live_results`).
-
-Recommended starting point on CPU machines: `--skip 5 --width 640`. If you have less CPU, try `--skip 8 --width 480`.
-
----
-
-## How detection works (brief)
-
-- The script captures frames with OpenCV and uses a background worker thread to run EasyOCR inference on a resized copy of the frame.
-- The worker returns detected bounding boxes (relative to the small image). The main thread scales those boxes to the full-resolution frame for display and saving.
-- This design keeps the UI responsive while OCR runs in the background. You will see textual updates in the terminal like:
-
-```
-Main: queued frame 5 for OCR
-OCR worker: Detected: 'STOP' (432 ms)
-```
-
----
-
-## macOS camera permissions
-
-If OpenCV reports: `not authorized to capture video` or `camera failed to properly initialize`:
-
-1. Open System Settings → Privacy & Security → Camera and allow access for Terminal (or your IDE).
-2. If you previously denied access, reset the permission prompt for Terminal and re-run:
-
-```bash
-tccutil reset Camera com.apple.Terminal
-# then re-run the script and accept the prompt when macOS asks
-```
-
-Note: on some macOS versions the Terminal bundle ID differs. If `tccutil` does not work, use the GUI to toggle camera permissions.
-
----
-
-## Troubleshooting and tips
-
-- If detection is too slow: increase `--skip` or decrease `--width`.
-- If EasyOCR installation fails because of PyTorch issues, install a compatible PyTorch first (see https://pytorch.org) and then `pip install easyocr`.
-- If `pip install -r requirements.txt` fails due to `psycopg2-binary` or other system-dependent packages, use the minimal install (above) for running the live demo.
-
----
-
-## Example: Test OCR on a static image
-
-Run a quick check that EasyOCR and the detector work on a saved image:
-
-```bash
-python3 - <<'PY'
-from text_detection import TextDetector
-d = TextDetector(gpu=False)
-print(d.get_text_string('test_images/test_stop_sign.jpg'))
-PY
-```
-
----
-
-## Next improvements you can enable
-
-- Add FPS/latency overlay on the display (helpful for tuning).
-- Add a multiprocessing worker for OCR to avoid GIL-related overhead.
-- Toggle whether saved annotated images are full-resolution or small-resolution.
-
-If you want, I can add any of these enhancements.
-
----
-
-Files of interest
-- `live_camera.py` — live capture + detection script
-- `text_detection.py` — TextDetector class (EasyOCR wrapper)
-- `test_local.py` — CLI for testing on single images
-
----
-
-## Environment Variables (WebSocket server)
-
-These configure `main_ws.py` when you run it with Uvicorn.
-
-- `MIN_CONF`: Minimum confidence for a detection to be considered. Lower values accept more detections but may introduce noise.
-   - Example: `MIN_CONF=0.6`
-
-- `STABILITY_WINDOW`: Number of recent frames to consider for stability (rolling buffer size).
-   - Example: `STABILITY_WINDOW=5`
-
-- `STABILITY_COUNT`: Minimum occurrences of the same (normalized) text within the window to declare a stable phrase.
-   - Example: `STABILITY_COUNT=3`
-
-- `WS_RAW_DIR`: Output directory for saved frames (raw/annotated). Defaults to `ws_raw`.
-   - Example: `WS_RAW_DIR=ws_raw`
-
--
-
-### Recommended presets
-
-- Fast lock (more jitter risk):
-   ```zsh
-   MIN_CONF=0.55 STABILITY_WINDOW=4 STABILITY_COUNT=2 uvicorn main_ws:app --host 0.0.0.0 --port 8000
-   ```
-
-- Faster/steadier:
-   ```zsh
-   MIN_CONF=0.6 STABILITY_WINDOW=5 STABILITY_COUNT=2 uvicorn main_ws:app --host 0.0.0.0 --port 8000
-   ```
-
-- Balanced:
-   ```zsh
-   MIN_CONF=0.65 STABILITY_WINDOW=6 STABILITY_COUNT=3 uvicorn main_ws:app --host 0.0.0.0 --port 8000
-   ```
-
-### Running the WebSocket server
-
-Ensure the virtual environment is activated and dependencies are installed (`fastapi`, `uvicorn[standard]`, `easyocr`, `opencv-python`, `numpy`). Then run:
-
-```zsh
-source .venv/bin/activate
-uvicorn main_ws:app --host 0.0.0.0 --port 8000
-```
-
-WebSocket endpoint: `ws://<host>:8000/ws`
-
-
-License: MIT-style (project-specific license not included)
-# Text Detection for Street Signs
-
-Simple text detection using EasyOCR for detecting and reading text in street sign images.
-
-## Prerequisites
-
-- Python 3.8 or higher (tested on Python 3.11)
-- Windows/Mac/Linux
-
-## Complete Setup Instructions
-
-### Step 1: Clone/Download the Repository
-
-```bash
-cd CIS4398-Project-NewSight-Backend
-```
-
-### Step 2: Create Virtual Environment
-
-**On Windows (PowerShell):**
-```powershell
-# Create virtual environment
 python -m venv venv
-
-# Activate virtual environment
-venv\Scripts\Activate
+source venv/bin/activate   # Mac/Linux
+venv\Scripts\activate      # Windows
 ```
 
-**On Windows (CMD):**
-```cmd
-# Create virtual environment
-python -m venv venv
-
-# Activate virtual environment
-venv\Scripts\activate
-```
-
-**On Mac/Linux:**
-```bash
-# Create virtual environment
-python3 -m venv venv
-
-# Activate virtual environment
-source venv/bin/activate
-```
-
-### Step 3: Install Dependencies
+### 2. Install Dependencies
 
 ```bash
-# Make sure virtual environment is activated (you should see (venv) in your terminal)
-
-# Install all required packages
 pip install -r requirements.txt
-
-# Or install individually:
-pip install opencv-python numpy easyocr
 ```
 
-**Note:** First installation may take a few minutes.
+**Note:** First installation may take several minutes as EasyOCR downloads pretrained models (~500MB) on first run.
 
-### Step 4: Test the Setup
+### 3. Environment Configuration
+
+Create a `.env` file in the root directory with the following variables:
+
+```env
+# Database Configuration
+DATABASE_URL=postgresql+psycopg2://username:password@host:port/dbname
+
+# AWS S3 Configuration
+AWS_ACCESS_KEY_ID=your-access-key
+AWS_SECRET_ACCESS_KEY=your-secret-key
+AWS_REGION=us-east-2
+AWS_S3_BUCKET_NAME=newsight-storage
+AWS_S3_FOLDER_NAME=emergency-uploads
+
+# AWS S3 Configuration for Familiar Face Detection
+S3_PREFIX=familiar_img/
+
+# Vonage (SMS) Configuration
+VONAGE_API_KEY=your-vonage-key
+VONAGE_API_SECRET=your-vonage-secret
+VONAGE_FROM_NUMBER=your-vonage-phone
+
+# Groq AI Configuration
+GROQ_API_KEY=your-groq-key
+
+# Google Maps API Configuration (for Navigation Feature)
+GOOGLE_MAPS_API_KEY=your-google-maps-api-key
+
+# Text Detection Configuration (Optional)
+MIN_CONF=0.6                    # Minimum confidence for OCR detections
+STABILITY_WINDOW=5              # Number of frames for stability check
+STABILITY_COUNT=3               # Minimum occurrences for stable text
+WS_RAW_DIR=ws_raw               # Directory for saved frames
+```
+
+**Important for Navigation Feature:**
+- Enable **Directions API**, **Places API**, and **Geocoding API** in Google Cloud Console
+- Set up billing for your Google Cloud project (required for Maps APIs)
+- The API key needs permissions for all three APIs
+
+---
+
+## Running the Server
+
+### Command
 
 ```bash
-python test_local.py
+uvicorn app.main:app --reload
 ```
 
-Select option 1 to test with an auto-generated sample image.
+### Server Details
 
-**First run will be slower** as EasyOCR downloads pretrained models (~500MB). This only happens once.
+- **Server runs at**: http://127.0.0.1:8000
+- **API Documentation**: http://127.0.0.1:8000/docs
+- **Alternative docs**: http://127.0.0.1:8000/redoc
 
-## Testing
+---
 
-### Interactive Testing
+## API Endpoints
+
+### Root Endpoint
+- **GET** `/` - Returns API status and available features
+
+### Emergency Contact Endpoints
+
+- **POST** `/contacts/` - Add a new emergency contact
+  - Requires: `user_id`, `name`, `phone` (Form data)
+  - Optional: `relationship`, `address`, `image_url`
+
+- **GET** `/contacts/{user_id}` - Get all contacts for a user
+
+- **DELETE** `/contacts/{contact_id}` - Delete a contact by ID
+
+- **POST** `/emergency_alert/{user_id}` - Send emergency alert
+  - Requires: `latitude`, `longitude` (Form data)
+  - Optional: `photo` (UploadFile)
+  - Sends SMS to all registered contacts for the user
+
+- **POST** `/sms/send` - Send SMS message
+  - Query params: `to_number`, `message`
+
+### Familiar Face Detection Endpoints
+
+- **WebSocket** `/ws` - Face recognition WebSocket connection
+- **WebSocket** `/ws/verify` - Alternative face verification WebSocket connection
+
+**WebSocket Protocol:**
+- Send binary JPEG frames for real-time face recognition
+- Or send JSON messages:
+  - `{"type": "ping"}` - Keep-alive ping
+  - `{"type": "hello", "feature": "familiar_face"}` - Initialize connection
+  - `{"type": "frame", "image_b64": "..."}` - Base64 encoded image frame
+
+**Response Format:**
+```json
+{
+  "ok": true,
+  "match": true/false,
+  "contactName": "Name or Unknown",
+  "confidence": 0.0-1.0,
+  "distance": 0.0-1.0,
+  "note": "match_status"
+}
+```
+
+### Voice Command Endpoints
+
+**POST** `/voice/wake-word` - Looks for the wake word "Hey, Guide"
+- Accepts: Audio file (WAV format)
+- Returns: `{"wake_word_detected": true/false}`
+
+**POST** `/voice/transcribe` - Transcribes audio and determines which feature to activate
+- Accepts: Audio file (WAV format)
+- Headers: `X-Session-Id` (required for navigation feature)
+- Returns: Feature identification with extracted parameters
+
+**Response Format:**
+```json
+{
+  "confidence": 0.0-1.0,
+  "extracted_params": {
+    "feature": "NAVIGATION",
+    "destination": "CVS Pharmacy",
+    "query": "nearest CVS",
+    "directions": {
+      "status": "OK",
+      "destination": "CVS Pharmacy",
+      "origin": {"lat": 40.123, "lng": -75.456},
+      "total_distance": "0.5 mi",
+      "total_duration": "10 mins",
+      "steps": [
+        {
+          "instruction": "Head north on Main St",
+          "distance": "500 ft",
+          "duration": "2 mins",
+          "distance_meters": 152,
+          "start_location": {"lat": 40.123, "lng": -75.456},
+          "end_location": {"lat": 40.124, "lng": -75.456}
+        }
+      ]
+    }
+  },
+  "TTS_Output": {
+    "message": "Starting navigation to CVS Pharmacy"
+  }
+}
+```
+
+**Note:** For NAVIGATION feature, if `X-Session-Id` header is provided and user location is available, the response includes full `directions` object with turn-by-turn steps from Google Maps API.
+
+### Location Tracking Endpoints
+
+**WebSocket** `/location/ws` - Continuous GPS location tracking
+- Accepts JSON messages:
+  ```json
+  {
+    "session_id": "uuid-string",
+    "latitude": 40.123456,
+    "longitude": -75.123456,
+    "timestamp": 1234567890
+  }
+  ```
+- Used by navigation feature to track user's real-time position
+- Location is stored server-side and accessible to other routes via session ID
+
+### Navigation Endpoints
+
+**POST** `/navigation/start` - Start a navigation session
+- Request body:
+  ```json
+  {
+    "session_id": "uuid-string",
+    "destination": "CVS Pharmacy"
+  }
+  ```
+- Returns: Full directions response with steps
+- Requires user location to be available via location WebSocket
+
+**WebSocket** `/navigation/ws?session_id=uuid` - Real-time turn-by-turn navigation updates
+- Query param: `session_id` (required)
+- Receives location updates from client
+- Sends navigation updates:
+  ```json
+  {
+    "status": "navigating",
+    "current_step": 1,
+    "total_steps": 5,
+    "instruction": "Head north on Main St",
+    "distance_to_next": 152.4,
+    "should_announce": true,
+    "announcement": "In 50 feet, turn right on Main Street"
+  }
+  ```
+- Status values: `"navigating"`, `"step_completed"`, `"arrived"`
+- Automatically advances steps based on GPS proximity
+- Announces turns at 100m, 50 feet, and 25 feet
+
+---
+
+## Text Detection (OCR) Feature
+
+### Testing OCR on Static Images
 
 ```bash
 python test_local.py
@@ -257,145 +348,169 @@ python test_local.py
 
 **Options:**
 1. **Test with sample image** - Auto-generates a test image with text
-2. **Test with your own image** - Provide path to your street sign image
+2. **Test with your own image** - Provide path to your street sign or document image
 3. **Exit**
 
-### Example Test
+### Live Camera OCR Demo (Optional)
+
+Run real-time text detection from your webcam:
 
 ```bash
-python test_local.py
-# Select option 1
-# Wait for EasyOCR to initialize (first time only)
-# View detected text output
+python live_camera.py --camera 0 --skip 5 --width 640 --out live_results
 ```
 
-## Project Structure
+**Controls:**
+- Press `q` to quit
+- Press `s` to save annotated frame
 
+**Flags:**
+- `--camera N` : Camera index (default 0)
+- `--skip N` : Process every Nth frame (default 5)
+- `--width W` : Resize width for OCR (default 640)
+- `--out DIR` : Output directory (default `live_results`)
+
+### Standalone WebSocket Server for OCR (Optional)
+
+For dedicated text detection service:
+
+```bash
+# With custom configuration
+MIN_CONF=0.6 STABILITY_WINDOW=5 STABILITY_COUNT=3 uvicorn main_ws:app --host 0.0.0.0 --port 8000
 ```
-CIS4398-Project-NewSight-Backend/
-├── text_detection.py       # Main text detection module
-├── test_local.py            # Interactive testing script
-├── README.md                # This file
-├── requirements.txt         # Python dependencies
-├── venv/                    # Virtual environment (created by you)
-├── test_images/             # Sample test images (auto-generated)
-└── test_results/            # Output images with annotations (optional)
-```
 
-## Models & Technology
+**WebSocket endpoint:** `ws://<host>:8000/ws`
 
-### EasyOCR
+### EasyOCR Technology
+
 - **Detection Model:** CRAFT (Character Region Awareness For Text detection)
 - **Recognition Model:** CRNN (Convolutional Recurrent Neural Network)
 - **Languages Supported:** 80+ (currently using English)
 - **Model Size:** ~500MB (downloads automatically on first run)
 - **Cache Location:** `~/.EasyOCR/model/` (Windows: `C:\Users\<username>\.EasyOCR\model\`)
 
-### Pretrained Models Sources
-- [EasyOCR GitHub](https://github.com/JaidedAI/EasyOCR)
-- [Roboflow Universe](https://universe.roboflow.com/) - Additional street sign datasets
-- [Hugging Face](https://huggingface.co/models?pipeline_tag=image-to-text) - Various OCR models
+### Performance Tips
+
+1. **First run:** Slow (downloads models ~500MB)
+2. **Subsequent runs:** Fast (models cached)
+3. **Image quality:** Higher quality = better accuracy
+4. **GPU acceleration:** Available if you have NVIDIA GPU with CUDA:
+   ```python
+   detector = TextDetector(gpu=True)
+   ```
+
+---
+
+## Architecture Notes
+
+### Feature Independence
+
+Features are designed to run independently:
+- **Emergency Contact** routes are prefixed and organized under `/contacts`, `/emergency_alert`, `/sms`
+- **Familiar Face Detection** uses WebSocket endpoints at `/ws` and `/ws/verify`
+- **Voice Commands** routes are prefixed and organized under `/voice/wake-word`, `/voice/transcribe`
+- **Navigation** routes are organized under `/navigation/start` with WebSocket at `/navigation/ws`
+- **Location Tracking** uses WebSocket endpoint at `/location/ws` (shared by navigation)
+- **Text Detection** available via standalone scripts (`text_detection.py`, `test_local.py`, `live_camera.py`, `main_ws.py`)
+- No route conflicts or overlapping functionality
+- Shared infrastructure (CORS, WebSocket, database) is unified
+
+### Feature Integration
+
+While features are independent, some features work together:
+- **Voice Commands** acts as supervisor for **Navigation** feature
+  - Identifies navigation requests
+  - Orchestrates the navigation initialization
+  - Returns complete directions in a single API call
+- **Location Tracking** provides GPS data for **Navigation** feature
+  - Continuous background tracking via WebSocket
+  - Location stored server-side by session ID
+  - Accessible to navigation routes for real-time updates
+
+### Modular Design
+
+- Routes are organized in separate modules for easy maintenance
+- Services are separated from route handlers for better code organization
+- Easy to add new features following the existing router pattern
+
+---
+
+## Technologies Used
+
+- **FastAPI** - Modern, fast web framework
+- **SQLAlchemy** - ORM for database operations
+- **PostgreSQL** - Relational database
+- **AWS S3** - Cloud storage for emergency photos and face recognition images
+- **Vonage API** - SMS messaging for emergency alerts
+- **DeepFace** - Face recognition library
+- **EasyOCR** - Text detection and optical character recognition
+- **OpenCV** - Image processing
+- **NumPy** - Numerical operations
+- **WebSocket** - Real-time bidirectional communication (face recognition, location tracking, navigation, text detection)
+- **Boto3** - AWS SDK for Python
+- **Pydantic** - Data validation and serialization
+- **gTTS** - Text-to-speech
+- **Groq API** - Speech-to-text (Whisper) and LLM (llama-3.1-8b-instant) for voice command processing
+- **Google Maps APIs**:
+  - **Directions API** - Walking route calculation
+  - **Places API** - Finding nearby locations (CVS, Starbucks, etc.)
+  - **Geocoding API** - Address resolution and location search
+- **googlemaps** - Python client for Google Maps APIs
+- **Haversine Formula** - GPS distance calculation for step advancement
+
+---
 
 ## Troubleshooting
 
-### Virtual Environment Issues
+### Navigation Issues
 
-**Problem:** `venv\Scripts\Activate.ps1` gives permission error
-```powershell
-# Solution: Run this first
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-```
+#### "Google Maps API error: NOT_FOUND"
+- **Cause**: API key not configured or APIs not enabled
+- **Fix**: 
+  1. Check `.env` file has `GOOGLE_MAPS_API_KEY=your-key`
+  2. Verify Directions API, Places API, and Geocoding API are enabled in Google Cloud Console
+  3. Restart backend server after updating `.env`
 
-**Problem:** Can't find `python` command
-```bash
-# Try using python3 instead
-python3 -m venv venv
-```
+#### "Location not available" or no directions returned
+- **Cause**: Location WebSocket not connected before voice command
+- **Fix**:
+  1. Wait 2-3 seconds after opening app for location to initialize
+  2. Check Android logs for "Location WebSocket connected"
+  3. Verify location permissions are granted on device
 
-### Installation Issues
+### Text Detection Issues
 
-**Problem:** `pip install` fails
-```bash
-# Solution: Upgrade pip first
-python -m pip install --upgrade pip
-```
-
-**Problem:** Package installation is slow
-- This is normal for first-time installation
-- EasyOCR has large dependencies (PyTorch, etc.)
-- Be patient, it can take 5-10 minutes
-
-### Runtime Issues
-
-**Problem:** "No text detected" in your image
+#### "No text detected" in image
 - Check image quality (lighting, focus)
 - Ensure text is clearly visible
 - Try lowering confidence threshold: `min_confidence=0.3`
 - Make sure image file exists and path is correct
 
-**Problem:** First run is very slow
+#### First run is very slow
 - This is normal - EasyOCR downloads models (~500MB)
 - Only happens once, models are cached
 - Subsequent runs are much faster
 
-**Problem:** Out of memory errors
+#### Out of memory errors
 - Reduce image size before processing
 - Close other applications
 - Consider using a machine with more RAM
+- Lower the `--width` parameter in live camera mode
 
-### Getting Help
+### General Issues
 
-If you encounter issues:
-1. Make sure virtual environment is activated
-2. Verify Python version: `python --version` (should be 3.8+)
-3. Reinstall dependencies: `pip install -r requirements.txt --force-reinstall`
-4. Check if image path is correct
-5. Try with the sample test first: `python test_local.py` → Option 1
-
-## Performance Tips
-
-1. **First run:** Slow (downloads models)
-2. **Subsequent runs:** Fast (models cached)
-3. **Image quality:** Higher quality = better accuracy
-4. **Image size:** Larger images take longer but may be more accurate
-5. **GPU acceleration:** Available if you have NVIDIA GPU with CUDA
-
-### Enable GPU (Optional)
-
-If you have an NVIDIA GPU with CUDA:
-```python
-detector = TextDetector(gpu=True)
+#### Virtual environment activation fails (Windows PowerShell)
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 ```
 
-## Dependencies
-
-- `opencv-python` - Image processing
-- `numpy` - Numerical operations
--- (Pillow was optional and has been removed from this project's requirements)
-- `easyocr` - Text detection and recognition
-
-See `requirements.txt` for specific versions.
-
-## Example Output
-
-```
-Processing: test_images/test_stop_sign.jpg
-
-TEXT OUTPUT:
---------------------------------------------------------------------------------
-
->>> 'STOP'
-
-DETAILED RESULTS:
---------------------------------------------------------------------------------
-
-Found 1 text element(s):
-
-1. Text: 'STOP'
-   Confidence: 0.956
+#### Pip installation fails
+```bash
+python -m pip install --upgrade pip
+pip install -r requirements.txt --force-reinstall
 ```
 
 ---
 
-**Questions or Issues?** Check the Troubleshooting section above or refer to the [EasyOCR documentation](https://github.com/JaidedAI/EasyOCR).
+## Development
 
+The unified backend maintains clean separation between features while sharing common infrastructure. Features can be developed and tested independently, and the modular structure makes it easy to extend with additional features in the future.
