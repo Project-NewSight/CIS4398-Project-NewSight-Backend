@@ -145,14 +145,17 @@ async def text_detection_websocket(websocket: WebSocket):
                                 stable_confidence = max_conf
                                 break
                 
-                # Send response
+                # Send response matching frontend expectations
+                # Frontend looks for "text_string" (primary) and "detections" (fallback)
                 response = {
-                    "ok": True,
+                    "text_string": stable_text,  # Frontend looks for this field
+                    "detections": detections if detections else [],  # Frontend looks for this array
+                    # Additional fields for compatibility
+                    "full_text": frame_phrase,
                     "stable_text": stable_text,
-                    "confidence": stable_confidence,
                     "is_stable": is_stable,
-                    "current_frame_text": frame_phrase,
-                    "detections": detections if detections else []
+                    "confidence": stable_confidence,
+                    "feature": "text_detection"
                 }
                 
                 await websocket.send_json(response)
