@@ -285,3 +285,34 @@ Both features are designed to run independently:
 ## Development
 
 The unified backend maintains clean separation between features while sharing common infrastructure. Both features can be developed and tested independently, and the modular structure makes it easy to extend with additional features in the future.
+
+---
+
+## ASL (Sign Language) Integration Notes
+
+- **HTTP image upload**: POST `multipart/form-data` to `/asl/image` with a JPEG/PNG file (field name `file`). The server decodes and runs the ASL model, returning JSON `{"letter": "A", "confidence": 0.72}`.
+- **WebSocket streaming**: existing `/ws/asl-stream` accepts JSON frames like `{ "feature": "asl_detection", "frame": "<base64>" }`. The handler now accepts:
+  - JPEG/PNG bytes (base64) — decoded with `cv2.imdecode`
+  - NV21 / NV12 / YUV420sp raw camera preview buffers (base64) — the code extracts the Y (luma) plane and reshapes to common resolutions (480x640, 720x1280, 1080x1920).
+  - Single-channel raw Y-plane buffers (base64) for the same resolutions.
+
+Recommendations for mobile clients (from the Android reference app):
+- If possible, **JPEG-compress** the frame on-device (e.g., `Bitmap.compress(Bitmap.CompressFormat.JPEG, 80, out)`) and POST to `/asl/image` — this is simplest and uses less bandwidth.
+- If streaming via WebSocket, send base64-encoded JPEG frames or the NV21 preview byte array. The server will extract the Y plane when NV21 is detected.
+- Prefer lower resolutions (e.g., 320x240 or 480x360) to reduce bandwidth and latency; server-side resizing will still occur before model inference.
+
+Quick Android (OkHttp) example to POST JPEG:
+
+```java
+// prepare RequestBody from byte[] jpegBytes
+RequestBody req = RequestBody.create(jpegBytes, MediaType.parse("image/jpeg"));
+Request request = new Request.Builder()
+    .url("http://<backend-host>:8000/asl/image")
+    .post(RequestBody.create(new MultipartBody.Builder().setType(MultipartBody.FORM)
+        .addFormDataPart("file", "frame.jpg", req)
+        .build()))
+    .build();
+```
+
+This endpoint is intended as an easy, robust integration path for mobile apps that don't need low-latency streaming.
+

@@ -1,50 +1,41 @@
-# Unified API for NewSight Backend
-# Combines Emergency Contact and Familiar Face Detection features
-import os
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-# from fastapi.staticfiles import StaticFiles  # Commented out - not currently used (photos go directly to S3)
-from app.routes import sms_routes
-from app.routes import contacts
-from app.routes import emergency_alert
-from app.routes import familiar_face
+import logging
+import sys
 
-app = FastAPI(
-    title="NewSight API",
-    version="1.0",
-    description="Backend API for Emergency Contact and Familiar Face Detection features"
+from app.routes.asl_ws import router as asl_router  # import the correct router
+from app.routes.asl_http import router as asl_http_router
+
+# Configure logging with detailed format
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler('backend.log')
+    ]
 )
+logger = logging.getLogger("app")
+logger.info("NewSight ASL Backend starting...")
 
-# CORS middleware for WebSocket and API access
+app = FastAPI()
+
+# Allow all origins for development; tighten in production
 app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+	CORSMiddleware,
+	allow_origins=["*"],
+	allow_credentials=True,
+	allow_methods=["*"],
+	allow_headers=["*"],
 )
 
-# Mount static files for temporary photos (commented out - not currently used)
-# Photos are uploaded directly to S3 and served via S3 URLs, so this mount is not needed
-# app.mount("/temp_photos", StaticFiles(directory="temp_photos"), name="temp_photos")
 
-# Include routers for both features
-# Emergency Contact Feature Routes
-app.include_router(sms_routes.router)
-app.include_router(contacts.router)
-app.include_router(emergency_alert.router)
+@app.get("/health")
+async def health_check():
+	return {"status": "ok"}
 
-# Familiar Face Detection Feature Routes
-# Register WebSocket routes directly to maintain original paths (/ws, /ws/verify)
-app.websocket("/ws")(familiar_face.ws_verify)
-app.websocket("/ws/verify")(familiar_face.ws_verify)
 
-@app.get("/")
-def root():
-    return {
-        "message": "NewSight Backend API Running Successfully!",
-        "features": [
-            "Emergency Contact Management",
-            "Familiar Face Detection"
-        ]
-    }
+# Include the ASL WebSocket router
+app.include_router(asl_router)
+# Include the ASL HTTP image upload router
+app.include_router(asl_http_router)
