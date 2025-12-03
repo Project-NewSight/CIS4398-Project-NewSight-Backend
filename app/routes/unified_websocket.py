@@ -60,6 +60,7 @@ async def unified_websocket_handler(websocket: WebSocket):
     print(f"[Unified WS] Client connected to {websocket.url.path}")
     
     # State tracking
+    ws_start_time = time.time()  # Track when WebSocket connected for familiar face suppression
     current_feature = None
     text_detection_state = {
         "recent_buffer": deque(maxlen=STABILITY_WINDOW),
@@ -91,6 +92,10 @@ async def unified_websocket_handler(websocket: WebSocket):
                     # Detect feature type
                     if msg_type == "hello":
                         current_feature = feature
+                        # Map detect_people to familiar_face (they use the same backend)
+                        if current_feature == "detect_people":
+                            current_feature = "familiar_face"
+                            print(f"[Unified WS] Feature 'detect_people' mapped to 'familiar_face'")
                         print(f"[Unified WS] Feature detected: {current_feature}")
                         await websocket.send_text(
                             json.dumps({"ok": True, "note": "hello_ack", "feature": current_feature})
@@ -109,13 +114,16 @@ async def unified_websocket_handler(websocket: WebSocket):
                     
                     elif msg_type == "frame" and "image_b64" in data:
                         # Handle familiar face detection (JSON format)
-                        current_feature = "familiar_face"
+                        if current_feature != "familiar_face":
+                            current_feature = "familiar_face"
+                            print(f"[Unified WS] Switching to familiar_face for frame processing")
+                        
                         jpeg_bytes = base64.b64decode(data.get("image_b64") or "")
                         await websocket.send_text(json.dumps({"ok": True, "note": "received", "len": len(jpeg_bytes)}))
                         
                         # Delegate to familiar face handler
                         await familiar_face.process_face_recognition(
-                            jpeg_bytes, websocket, time.time(), 1.2
+                            jpeg_bytes, websocket, ws_start_time, 1.2
                         )
                         continue
                 
@@ -139,7 +147,7 @@ async def unified_websocket_handler(websocket: WebSocket):
                 
                 # Delegate to familiar face handler
                 await familiar_face.process_face_recognition(
-                    jpeg_bytes, websocket, time.time(), 1.2
+                    jpeg_bytes, websocket, ws_start_time, 1.2
                 )
                 continue
     

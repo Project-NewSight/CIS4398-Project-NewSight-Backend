@@ -241,9 +241,14 @@ async def process_face_recognition(jpeg_bytes: bytes, websocket: WebSocket, ws_s
         }))
 
     except Exception as e:
+        import traceback
         print(f"[FACE] Error processing frame: {e}")
-        await websocket.send_text(json.dumps({
-            "ok": False,
-            "error": str(e)
-        }))
+        print(f"[FACE] Full traceback:\n{traceback.format_exc()}")
+        try:
+            await websocket.send_text(json.dumps({
+                "ok": False,
+                "error": str(e)
+            }))
+        except Exception as send_error:
+            print(f"[FACE] Could not send error response: {send_error}")
 
