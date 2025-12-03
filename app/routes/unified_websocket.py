@@ -119,12 +119,24 @@ async def unified_websocket_handler(websocket: WebSocket):
                             print(f"[Unified WS] Switching to familiar_face for frame processing")
                         
                         jpeg_bytes = base64.b64decode(data.get("image_b64") or "")
+                        print(f"[Unified WS] Received frame: {len(jpeg_bytes)} bytes, feature={feature}")
+                        
+                        # Check connection before acknowledging
+                        if websocket.client_state != WebSocketState.CONNECTED:
+                            print(f"[Unified WS] WebSocket disconnected, cannot process frame")
+                            break
+                        
                         await websocket.send_text(json.dumps({"ok": True, "note": "received", "len": len(jpeg_bytes)}))
                         
                         # Delegate to familiar face handler
-                        await familiar_face.process_face_recognition(
-                            jpeg_bytes, websocket, ws_start_time, 1.2
-                        )
+                        try:
+                            await familiar_face.process_face_recognition(
+                                jpeg_bytes, websocket, ws_start_time, 1.2
+                            )
+                        except Exception as e:
+                            print(f"[Unified WS] Error in face recognition: {e}")
+                            import traceback
+                            print(traceback.format_exc())
                         continue
                 
                 except json.JSONDecodeError:
@@ -144,11 +156,22 @@ async def unified_websocket_handler(websocket: WebSocket):
             if "bytes" in message and message["bytes"] is not None:
                 current_feature = "familiar_face"
                 jpeg_bytes = message["bytes"]
+                print(f"[Unified WS] Received binary frame: {len(jpeg_bytes)} bytes")
+                
+                # Check connection before processing
+                if websocket.client_state != WebSocketState.CONNECTED:
+                    print(f"[Unified WS] WebSocket disconnected, cannot process binary frame")
+                    break
                 
                 # Delegate to familiar face handler
-                await familiar_face.process_face_recognition(
-                    jpeg_bytes, websocket, ws_start_time, 1.2
-                )
+                try:
+                    await familiar_face.process_face_recognition(
+                        jpeg_bytes, websocket, ws_start_time, 1.2
+                    )
+                except Exception as e:
+                    print(f"[Unified WS] Error in face recognition (binary): {e}")
+                    import traceback
+                    print(traceback.format_exc())
                 continue
     
     except WebSocketDisconnect:
