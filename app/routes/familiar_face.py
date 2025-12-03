@@ -54,7 +54,9 @@ async def safe_send(websocket: WebSocket, message: dict):
     try:
         from starlette.websockets import WebSocketState
         if websocket.client_state == WebSocketState.CONNECTED:
-            await websocket.send_text(json.dumps(message))
+            msg_json = json.dumps(message)
+            await websocket.send_text(msg_json)
+            print(f"[FACE] Sent response: {msg_json}")
             return True
         else:
             print(f"[FACE] Cannot send - WebSocket state: {websocket.client_state}")
