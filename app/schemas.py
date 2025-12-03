@@ -24,7 +24,8 @@ class UserCreate(BaseModel):
 class Userout(BaseModel):
     user_id:int
     email: EmailStr
-    name:str
+    name:str | None = None
+
 
     class Config:
         from_attributes = True
