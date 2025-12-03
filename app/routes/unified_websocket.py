@@ -102,42 +102,52 @@ async def unified_websocket_handler(websocket: WebSocket):
                         )
                         continue
                     
-                    # Route to appropriate handler
-                    if feature == "text_detection" or (current_feature == "text_detection"):
-                        # Handle text detection
-                        try:
-                            await handle_text_detection(websocket, data, text_detection_state)
-                        except WebSocketDisconnect:
-                            # Connection closed, exit loop
-                            raise
-                        continue
-                    
-                    elif msg_type == "frame" and "image_b64" in data:
-                        # Handle familiar face detection (JSON format)
-                        if current_feature != "familiar_face":
-                            current_feature = "familiar_face"
-                            print(f"[Unified WS] Switching to familiar_face for frame processing")
+                    # Route based on feature field in the message
+                    if msg_type == "frame" and "image_b64" in data:
+                        # Check feature to determine which handler to use
+                        frame_feature = data.get("feature") or current_feature
                         
-                        jpeg_bytes = base64.b64decode(data.get("image_b64") or "")
-                        print(f"[Unified WS] Received frame: {len(jpeg_bytes)} bytes, feature={feature}")
+                        if frame_feature == "text_detection":
+                            # Handle text detection
+                            try:
+                                await handle_text_detection(websocket, data, text_detection_state)
+                            except WebSocketDisconnect:
+                                raise
+                            except Exception as e:
+                                print(f"[Unified WS] Error in text detection: {e}")
+                                import traceback
+                                print(traceback.format_exc())
+                            continue
                         
-                        # Check connection before acknowledging
-                        if websocket.client_state != WebSocketState.CONNECTED:
-                            print(f"[Unified WS] WebSocket disconnected, cannot process frame")
-                            break
-                        
-                        await websocket.send_text(json.dumps({"ok": True, "note": "received", "len": len(jpeg_bytes)}))
-                        
-                        # Delegate to familiar face handler
-                        try:
-                            await familiar_face.process_face_recognition(
-                                jpeg_bytes, websocket, ws_start_time, 1.2
-                            )
-                        except Exception as e:
-                            print(f"[Unified WS] Error in face recognition: {e}")
-                            import traceback
-                            print(traceback.format_exc())
-                        continue
+                        elif frame_feature == "familiar_face" or frame_feature == "detect_people":
+                            # Handle familiar face detection (JSON format)
+                            if current_feature != frame_feature:
+                                current_feature = frame_feature
+                                print(f"[Unified WS] Processing {frame_feature} frame")
+                            
+                            jpeg_bytes = base64.b64decode(data.get("image_b64") or "")
+                            print(f"[Unified WS] Received frame: {len(jpeg_bytes)} bytes, feature={frame_feature}")
+                            
+                            # Check connection before acknowledging
+                            if websocket.client_state != WebSocketState.CONNECTED:
+                                print(f"[Unified WS] WebSocket disconnected, cannot process frame")
+                                break
+                            
+                            await websocket.send_text(json.dumps({"ok": True, "note": "received", "len": len(jpeg_bytes)}))
+                            
+                            # Delegate to familiar face handler
+                            try:
+                                await familiar_face.process_face_recognition(
+                                    jpeg_bytes, websocket, ws_start_time, 1.2
+                                )
+                            except Exception as e:
+                                print(f"[Unified WS] Error in face recognition: {e}")
+                                import traceback
+                                print(traceback.format_exc())
+                            continue
+                        else:
+                            print(f"[Unified WS] Unknown feature in frame: {frame_feature}")
+                            continue
                 
                 except json.JSONDecodeError:
                     print("[Unified WS] Invalid JSON, ignoring")
@@ -190,19 +200,19 @@ async def handle_text_detection(websocket: WebSocket, data: dict, state: dict):
     """
     Handle text detection WebSocket messages
     
-    Expected format:
-    {
-        "feature": "text_detection",
-        "frame": "base64_encoded_image"
-    }
+    Expected format (supports both old and new format):
+    Old: {"feature": "text_detection", "frame": "base64_encoded_image"}
+    New: {"type": "frame", "feature": "text_detection", "image_b64": "base64_encoded_image"}
     """
     # Check if websocket is still connected
     if websocket.client_state != WebSocketState.CONNECTED:
         print(f"[Unified WS] WebSocket not connected (state: {websocket.client_state}), skipping frame")
         raise WebSocketDisconnect(code=1000, reason="Connection not in CONNECTED state")
     
-    frame_b64 = data.get("frame")
+    # Accept both "frame" (old format) and "image_b64" (new format)
+    frame_b64 = data.get("image_b64") or data.get("frame")
     if not frame_b64:
+        print("[Unified WS] No frame data in text detection message")
         return
     
     # Get text detector
