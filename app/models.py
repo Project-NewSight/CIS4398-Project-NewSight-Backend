@@ -19,6 +19,7 @@ class User(Base):
         Integer,
         Sequence("users_user_id_seq"),
         primary_key=True,
+        autoincrement=True,
         index=True,
     )
     name = Column(String(100), nullable=True)
