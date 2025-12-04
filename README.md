@@ -6,6 +6,7 @@ This backend service powers **Project NewSight**, combining features:
 3. **Voice Command** - Allows users to speak through the Android phone's microphone to send voice commands to activate features. The feature can also be activated using a wake word "Hey Guide"
 4. **Voice-Activated Navigation** - Provides real-time, step-by-step walking directions with voice announcements and AR-style visual overlay, fully hands-free for visually impaired users
 5. **Text Detection (OCR)** - Real-time text detection and recognition using EasyOCR for reading street signs, labels, and environmental text
+6. **Object / Obstacle Detection** – Runs a YOLOv8 model on camera frames to detect nearby obstacles (people, cars, bikes, etc.), groups them into left / front / right regions, and returns a short, TTS-friendly summary like “Person in front about 2 meters away”.
 
 ## Overview
 
@@ -19,6 +20,7 @@ The backend is built with **FastAPI** and integrates with:
 - **Groq llama** - for deciding which feature to execute based on user command
 - **Google Maps API** – for walking directions, place search, and real-time navigation
 - **EasyOCR** - for text detection and optical character recognition
+- **Ultralytics YOLOv8** – for real-time object and obstacle detection on camera frames
 
 The system ensures that in an emergency, user data is safely transmitted, messages are delivered quickly, and photos are uploaded to a secure cloud location. Additionally, it provides real-time face recognition capabilities to identify familiar contacts. Users can also interact with the system via voice commands, allowing hands-free operation to trigger features including fully voice-activated turn-by-turn navigation and text detection for reading environmental text.
 
@@ -70,6 +72,30 @@ The system ensures that in an emergency, user data is safely transmitted, messag
 - **Optimized Performance**: Supports GPU acceleration and frame skipping for better performance
 - **Use Cases**: Reading street signs, labels, product information, environmental text
 
+### Object / Obstacle Detection Feature
+
+- **Purpose**: Detects nearby obstacles (people, cars, bikes, strollers, etc.) in a single camera frame and summarizes what is around the user (left / front / right) in a way that is easy to turn into speech.
+- **Model**: Uses **Ultralytics YOLOv8** with configurable weights (default: `object_detection_backend_yolov8n.pt`).
+- **Obstacle Awareness**:
+  - Treats certain classes (person, car, bicycle, motorcycle, bus, truck, stroller, etc.) as “obstacles”
+  - Measures bounding box size and screen position to decide whether something is big and centered enough to be a priority obstacle
+- **Region Logic**:
+  - Splits the frame into three regions: **left**, **front**, **right** (based on normalized box center `x`)
+  - Stores at most one “best” obstacle and one “best” generic object per region
+  - Chooses a single highest-priority detection for messaging, with priority:
+    1. Obstacle in front  
+    2. Obstacle on left/right  
+    3. Object in front  
+    4. Object on left/right
+- **Summary Output**:
+  - Builds a compact `summary` object for the Android app that includes:
+    - `high_priority_warning` – whether there is something important to warn about
+    - `message` – human-readable summary like “Person in front about 2 meters away”
+    - `class_counts` – counts of each detected class
+    - `closest` – info about the closest relevant detection
+    - `processing_ms` – how long the frame took to process
+    - `TTS_Output.messages` – list of messages ready for TTS
+
 ### Shared Infrastructure
 - Clean, modular structure for easy integration with the Project NewSight mobile frontend
 - CORS middleware enabled for cross-origin requests
@@ -98,6 +124,7 @@ CIS4398-Project-NewSight-Backend/
 │   │   ├── voice_routes.py      # Voice command endpoints (supervisor for navigation)
 │   │   ├── location_routes.py   # Location tracking WebSocket endpoint
 │   │   └── navigation_routes.py # Navigation endpoints and WebSocket for turn-by-turn updates
+│   │   └── object_detection_backend.py # Object / obstacle detection HTTP endpoints (YOLOv8)
 │   │
 │   └── services/
 │       ├── sms_service.py       # Handles Vonage SMS integration
@@ -338,6 +365,16 @@ uvicorn app.main:app --reload
 
 ---
 
+### Object / Obstacle Detection Endpoint
+**HTTP Endpoint**
+
+- **POST** `/object-detection/detect`
+  - **Content-Type**: `multipart/form-data`
+  - **Form fields**:
+    - `file` (required): image frame (JPEG/PNG)
+    - `frame_id` (optional, int): client frame index
+    - `device_id` (optional, string): identifier of the sending device
+
 ## Text Detection (OCR) Feature
 
 ### Testing OCR on Static Images
@@ -514,3 +551,13 @@ pip install -r requirements.txt --force-reinstall
 ## Development
 
 The unified backend maintains clean separation between features while sharing common infrastructure. Features can be developed and tested independently, and the modular structure makes it easy to extend with additional features in the future.
+
+### Running with Uvicorn + Nginx (Production)
+
+In production, we recommend running Uvicorn on localhost and putting **Nginx** in front
+as a reverse proxy. Nginx will:
+
+- Listen on port 80 (and optionally 443 with TLS)
+- Proxy HTTP traffic to Uvicorn (`127.0.0.1:8000`)
+- Handle **WebSockets** for `/ws`, `/ws/verify`, `/location/ws`, `/navigation/ws`
+- Allow larger uploads for image frames (object / obstacle detection and text detection)
