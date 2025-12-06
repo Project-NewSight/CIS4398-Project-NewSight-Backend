@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>NewSight Live Camera</title>
+  <style>
+    video { width: 100%; border: 2px solid #999; border-radius: 8px; }
+    button {
+      width: 100%;
+      padding: 14px;
+      margin-top: 12px;
+      background: #1e88e5;
+      color: white;
+      font-size: 18px;
+      border-radius: 8px;
+      border: none;
+    }
+  </style>
+</head>
+
+<body>
+  <h2>📸 NewSight – Live Camera</h2>
+  <p>Point at your clothing item and tap “Capture”.</p>
+
+  <video id="camera" autoplay playsinline></video>
+  <button id="captureBtn">Capture</button>
+
+  <script>
+    const video = document.getElementById('camera');
+    const captureBtn = document.getElementById('captureBtn');
+
+    // 1. Ask for camera access
+    navigator.mediaDevices.getUserMedia({ video: true })
+      .then(stream => { video.srcObject = stream; })
+      .catch(err => alert("Camera access denied: " + err));
+
+    // 2. Capture frame → JPEG → send to FastAPI
+    captureBtn.onclick = async () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext("2d").drawImage(video, 0, 0);
+      
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg"));
+
+      let formData = new FormData();
+      formData.append("file", blob, "frame.jpg");
+
+      // Hardcoded example (you’ll replace with UI or voice input later)
+      formData.append("event", "wedding");
+      formData.append("weather", "cold");
+      formData.append("culture", "western");
+      formData.append("mostly_outside", "false");
+
+      const res = await fetch("YOUR_BACKEND_URL/voice/is_appropriate", {
+        method: "POST",
+        body: formData
+      });
+
+      const json = await res.json();
+      console.log(json);
+
+      alert(json.TTS_Output.message);
+      speak(json.TTS_Output.message);
+    };
+
+    // 3. Speak the TTS output aloud
+    function speak(text) {
+      const utter = new SpeechSynthesisUtterance(text);
+      window.speechSynthesis.speak(utter);
+    }
+  </script>
+</body>
+</html>
