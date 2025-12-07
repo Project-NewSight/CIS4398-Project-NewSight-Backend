@@ -13,9 +13,10 @@ Project NewSight is an assistive technology backend service designed to help vis
 5. [Requirements](#requirements)
 6. [Build, Install & Configuration](#build-install--configuration)
 7. [Running the Servers](#running-the-servers)
-8. [Environment Variables](#environment-variables)
-9. [Known Issues](#known-issues)
-10. [Future Work](#future-work)
+8. [Testing](#testing)
+9. [Environment Variables](#environment-variables)
+10. [Known Issues](#known-issues)
+11. [Future Work](#future-work)
 
 ---
 
@@ -85,6 +86,22 @@ CIS4398-Project-NewSight-Backend/
 │   └── requirements.txt
 │
 ├── requirements.txt              # Main branch dependencies
+├── tests/                        # Test suite
+│   ├── conftest.py              # Pytest configuration and fixtures
+│   ├── test_contacts.py         # Emergency contacts tests
+│   ├── test_emergency_alert.py  # Emergency alert tests
+│   ├── test_familiar_face.py    # Face recognition tests
+│   ├── test_voice_commands.py    # Voice command tests
+│   ├── test_navigation.py       # Navigation tests
+│   ├── test_location.py         # Location/GPS tests
+│   ├── test_text_detection.py  # OCR tests
+│   ├── test_object_detection.py # Object detection tests
+│   ├── test_sms_routes.py      # SMS route tests
+│   ├── test_websocket.py       # WebSocket handler tests
+│   ├── test_asl_detection.py  # ASL detection unit tests
+│   └── test_color_cue.py       # Color-cue unit tests
+├── run_all_tests.py             # Test runner with coverage
+├── .coveragerc                   # Coverage configuration
 └── README.md
 ```
 
@@ -275,6 +292,9 @@ Smart clothing detection and virtual closet management. Helps users identify the
 - **Google Maps APIs** - Directions, Places, Geocoding (for Navigation)
 - **TransitApp API** - Public transit routes, schedules, and alerts (for Transit)
 - **WebSocket** - Real-time communication
+- **pytest** - Testing framework
+- **pytest-cov** - Coverage plugin for pytest
+- **coverage** - Code coverage reporting
 
 ### AslBackend
 - **FastAPI**
@@ -360,6 +380,8 @@ pip install -r requirements.txt
 ```
 
 Note: First run downloads EasyOCR models (~500MB), this is normal.
+
+**Note:** Testing dependencies (pytest, pytest-cov, coverage) are included in `requirements.txt` and will be installed automatically.
 
 **3. Setup PostgreSQL**
 
@@ -710,6 +732,197 @@ You can run all three backends simultaneously in separate terminal windows. They
 
 ---
 
+## Testing
+
+This project includes a comprehensive test suite covering all major features of the backend. Tests use pytest with coverage reporting to ensure code quality and reliability.
+
+### What We're Testing
+
+The test suite covers all main features with unit and integration tests:
+
+- **Emergency Contacts & Alerts** (`test_contacts.py`, `test_emergency_alert.py`)
+  - Contact CRUD operations
+  - Emergency alert sending with location and photos
+  - SMS integration
+  - Database error handling
+
+- **Familiar Face Detection** (`test_familiar_face.py`)
+  - Gallery synchronization from S3
+  - Face recognition logic
+  - Gallery management operations
+
+- **Voice Commands** (`test_voice_commands.py`)
+  - Wake word detection ("Hey Guide")
+  - Speech-to-text transcription
+  - Command routing to features
+  - Navigation and emergency command recognition
+
+- **Navigation** (`test_navigation.py`)
+  - Navigation session start/stop
+  - Directions retrieval
+  - Health check endpoints
+  - Session validation
+
+- **Location/GPS** (`test_location.py`)
+  - GPS coordinate retrieval
+  - Reverse geocoding
+  - Permission handling
+  - Accuracy validation
+
+- **Text Detection (OCR)** (`test_text_detection.py`)
+  - Text detection service info
+  - Text normalization
+  - Stability filtering
+  - Confidence threshold filtering
+
+- **Object Detection** (`test_object_detection.py`)
+  - Obstacle detection logic
+  - Direction identification (left/front/right)
+  - Confidence threshold filtering
+
+- **SMS Routes** (`test_sms_routes.py`)
+  - SMS sending functionality
+  - Error handling
+
+- **WebSocket Handlers** (`test_websocket.py`)
+  - Message routing
+  - Error handling
+  - Connection management
+
+- **ASL Detection** (`test_asl_detection.py`)
+  - Letter mapping logic
+  - Confidence threshold validation
+  - Unit tests for ASL backend
+
+- **Color-Cue** (`test_color_cue.py`)
+  - Color detection logic
+  - Multi-color detection
+  - Clothing category classification
+  - Pattern detection
+
+### Testing Tools
+
+- **pytest** (v7.4.3) - Primary testing framework
+- **pytest-cov** (v4.1.0) - Coverage plugin for pytest
+- **pytest-asyncio** (v0.21.1) - Async test support
+- **coverage** - Code coverage reporting and HTML generation
+
+### Running Tests
+
+#### Basic Test Execution
+
+Run all tests with verbose output:
+
+```bash
+cd CIS4398-Project-NewSight-Backend
+source venv/bin/activate  # or venv\Scripts\activate on Windows
+pytest tests/ -v
+```
+
+#### Run Tests with Coverage
+
+Use the provided test runner script to generate comprehensive coverage reports:
+
+```bash
+python run_all_tests.py
+```
+
+This will:
+- Run all tests from the `tests/` directory
+- Generate coverage for main app, AslBackend, and color-cue
+- Create an HTML coverage report in `htmlcov_combined/`
+- Display a terminal coverage report
+
+#### Run Individual Test Files
+
+Test specific features:
+
+```bash
+# Test emergency contacts
+pytest tests/test_contacts.py -v
+
+# Test voice commands
+pytest tests/test_voice_commands.py -v
+
+# Test navigation
+pytest tests/test_navigation.py -v
+```
+
+#### Run Specific Test Functions
+
+```bash
+# Run a specific test
+pytest tests/test_contacts.py::test_add_contact -v
+```
+
+### Coverage Reports
+
+After running tests with coverage, you can view reports in two ways:
+
+#### HTML Coverage Report
+
+```bash
+# Generate HTML report (included in run_all_tests.py)
+coverage html -d htmlcov_combined
+
+# Open the report
+# Windows: start htmlcov_combined\index.html
+# Mac: open htmlcov_combined/index.html
+# Linux: xdg-open htmlcov_combined/index.html
+```
+
+The HTML report provides:
+- Line-by-line coverage for all files
+- Percentage coverage per module
+- Missing line indicators
+- Interactive file browsing
+
+#### Terminal Coverage Report
+
+```bash
+# Generate terminal report
+coverage report --skip-empty
+```
+
+This displays a summary table showing:
+- Coverage percentage per file
+- Number of statements, missing lines, and excluded lines
+
+### Test Structure
+
+The test suite is organized in the `tests/` directory:
+
+- **`conftest.py`** - Pytest configuration and shared fixtures:
+  - `db_session` - In-memory SQLite database for each test
+  - `client` - FastAPI TestClient with database override
+  - `sample_user_id` - Sample user ID fixture
+  - `sample_contact_data` - Sample contact data fixture
+
+- **Test Files** - Each feature has a corresponding test file:
+  - Tests use mocking for external services (AWS S3, Vonage SMS, Google APIs)
+  - Database tests use in-memory SQLite for isolation
+  - WebSocket tests are marked as skipped (require real-time connection)
+  - Some ML model tests are skipped (require heavy dependencies)
+
+### Test Configuration
+
+Coverage configuration is defined in `.coveragerc`:
+- Excludes virtual environments, migrations, and generated files
+- Includes all app modules and test files
+- Configures HTML report output directory
+
+### Notes
+
+- Some tests are marked with `@pytest.mark.skip` for features requiring:
+  - Real-time connections (WebSocket tests)
+  - Heavy ML dependencies (DeepFace, YOLO)
+  - External API keys (Google Vision, Roboflow)
+- Database tests use in-memory SQLite for fast, isolated testing
+- External services (S3, SMS, APIs) are mocked using `unittest.mock`
+- Coverage reports combine all three backends (main, AslBackend, color-cue)
+
+---
+
 ## Environment Variables
 
 ### Main dev-branch Environment Variables
@@ -895,6 +1108,8 @@ The following improvements are planned for future versions:
     │ PostgreSQL  │         │  AWS S3 │
     └─────────────┘         └─────────┘
 ```
+
+**Testing Infrastructure:** The project includes a comprehensive test suite (`tests/`) with pytest-based unit and integration tests. Tests use in-memory SQLite for database operations and mock external services. Coverage reports combine all three backends for unified reporting.
 
 ---
 
