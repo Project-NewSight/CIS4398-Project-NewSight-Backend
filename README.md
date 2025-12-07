@@ -11,10 +11,11 @@ Project NewSight is an assistive technology backend service designed to help vis
 3. [Features](#features)
 4. [Tech Stack](#tech-stack)
 5. [Requirements](#requirements)
-6. [Setup Instructions](#setup-instructions)
+6. [Build, Install & Configuration](#build-install--configuration)
 7. [Running the Servers](#running-the-servers)
 8. [Environment Variables](#environment-variables)
-9. [Future Work](#future-work)
+9. [Known Issues](#known-issues)
+10. [Future Work](#future-work)
 
 ---
 
@@ -313,11 +314,38 @@ Smart clothing detection and virtual closet management. Helps users identify the
 
 ---
 
-## Setup Instructions
+## Build, Install & Configuration
 
-### Main dev-branch Setup
+This section provides detailed instructions to build, install, and configure the entire Project NewSight backend on target devices.
 
-**1. Create Virtual Environment**
+### Prerequisites
+
+Before beginning installation, ensure you have:
+- Python 3.11 or higher installed
+- PostgreSQL 12+ installed and running
+- Git installed for cloning the repository
+- Internet connection for downloading dependencies
+- Admin/sudo privileges for installing system packages
+
+### Target Devices
+
+This backend can be deployed on:
+- **Development machines** (Windows, macOS, Linux) for local testing
+- **Physical Android devices** connected via USB (for mobile app testing)
+- **Cloud servers** (AWS EC2, DigitalOcean, etc.) for production deployment
+
+---
+
+### Main dev-branch - Build & Install
+
+**1. Clone Repository**
+
+```bash
+git clone <repository-url>
+cd CIS4398-Project-NewSight-Backend
+```
+
+**2. Create Virtual Environment**
 
 ```bash
 python -m venv venv
@@ -379,16 +407,19 @@ STABILITY_COUNT=3
 
 ---
 
-### AslBackend Setup
+### AslBackend - Build & Install
 
-**1. Navigate to AslBackend**
+**1. Navigate to AslBackend Directory**
 
 ```bash
+# From repository root
 cd CIS4398-Project-NewSight-Backend
 cd AslBackend
 ```
 
-**2. Create Virtual Environment**
+**2. Create Isolated Virtual Environment**
+
+Note: AslBackend requires a separate virtual environment due to TensorFlow dependency conflicts.
 
 ```bash
 python -m venv venv_asl
@@ -412,16 +443,19 @@ The TensorFlow Lite model file should be present in `app/models/`.
 
 ---
 
-### color-cue Setup
+### color-cue - Build & Install
 
-**1. Navigate to color-cue**
+**1. Navigate to color-cue Directory**
 
 ```bash
+# From repository root
 cd CIS4398-Project-NewSight-Backend
 cd color-cue
 ```
 
-**2. Create Virtual Environment**
+**2. Create Isolated Virtual Environment**
+
+Note: color-cue requires a separate virtual environment due to Roboflow and Google Vision dependency conflicts.
 
 ```bash
 python -m venv venv_colorcue
@@ -464,6 +498,166 @@ ROBOFLOW_API_KEY=your-roboflow-api-key
 ```
 
 Note: The Roboflow API key is currently hardcoded in `app/services/colorcue_service.py` around line 21-27. For production, update it to read from environment variables.
+
+---
+
+### Build Automation
+
+**Note on Makefiles:** This project does not currently use Makefiles or build automation scripts. All dependencies are managed through Python's pip package manager via `requirements.txt` files.
+
+For streamlined setup, you can create a simple build script:
+
+**Linux/Mac (setup.sh):**
+```bash
+#!/bin/bash
+# Main backend setup
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# AslBackend setup
+cd AslBackend
+python3 -m venv venv_asl
+source venv_asl/bin/activate
+pip install -r requirements.txt
+cd ..
+
+# color-cue setup
+cd color-cue
+python3 -m venv venv_colorcue
+source venv_colorcue/bin/activate
+pip install -r requirements.txt
+cd ..
+```
+
+**Windows (setup.bat):**
+```batch
+@echo off
+REM Main backend setup
+python -m venv venv
+call venv\Scripts\activate
+pip install -r requirements.txt
+
+REM AslBackend setup
+cd AslBackend
+python -m venv venv_asl
+call venv_asl\Scripts\activate
+pip install -r requirements.txt
+cd ..
+
+REM color-cue setup
+cd color-cue
+python -m venv venv_colorcue
+call venv_colorcue\Scripts\activate
+pip install -r requirements.txt
+cd ..
+```
+
+---
+
+### Configuring for Target Devices
+
+#### Android Device Testing
+
+To test with a physical Android device connected to your development machine:
+
+**1. Install Android Debug Bridge (ADB)**
+
+ADB is included with Android Studio. Verify installation:
+
+```bash
+# Mac/Linux
+export PATH=$PATH:$HOME/Library/Android/sdk/platform-tools  # Mac
+export PATH=$PATH:$HOME/Android/Sdk/platform-tools           # Linux
+
+# Verify
+adb version
+```
+
+**2. Enable USB Debugging on Android Device**
+
+On your Android device:
+- Go to Settings > About Phone
+- Tap "Build Number" 7 times to enable Developer Mode
+- Go to Settings > Developer Options
+- Enable "USB Debugging"
+
+**3. Connect Device and Verify**
+
+```bash
+# Connect device via USB
+adb devices
+
+# Expected output:
+# List of devices attached
+# ABC123456789    device
+```
+
+**4. Setup Port Forwarding**
+
+Forward backend ports from your development machine to the Android device:
+
+```bash
+# Forward main backend
+adb reverse tcp:8000 tcp:8000
+
+# Forward AslBackend (if running)
+adb reverse tcp:8001 tcp:8001
+
+# Forward color-cue (if running)
+adb reverse tcp:8002 tcp:8002
+
+# Verify forwarding
+adb reverse --list
+```
+
+**5. Test Connection from Android**
+
+The Android app can now access the backend at:
+- Main backend: `http://localhost:8000`
+- AslBackend: `http://localhost:8001`
+- color-cue: `http://localhost:8002`
+
+**6. Remove Port Forwarding (when done)**
+
+```bash
+adb reverse --remove-all
+```
+
+#### Production Server Deployment
+
+For deploying to a production server (AWS, DigitalOcean, etc.):
+
+**1. Install System Dependencies**
+
+```bash
+# Ubuntu/Debian
+sudo apt update
+sudo apt install python3.11 python3-pip python3-venv postgresql
+
+# Start PostgreSQL
+sudo systemctl start postgresql
+sudo systemctl enable postgresql
+```
+
+**2. Clone and Setup**
+
+Follow the standard setup instructions above, but use production environment variables.
+
+**3. Run Servers**
+
+```bash
+# Run main backend
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+# Run AslBackend (in separate terminal)
+cd AslBackend
+uvicorn app.main:app --host 0.0.0.0 --port 8001
+
+# Run color-cue (in separate terminal)
+cd color-cue
+uvicorn app.main:app --host 0.0.0.0 --port 8002
+```
 
 ---
 
@@ -556,6 +750,94 @@ AslBackend has minimal dependencies and primarily uses local model inference. Da
 | `ROBOFLOW_API_KEY` | Yes* | Roboflow API key (*currently hardcoded) |
 
 **Security Note:** Replace hardcoded credentials with environment variables before production deployment.
+
+---
+
+## Known Issues
+
+This section documents known bugs and limitations in the current release.
+
+### Main dev-branch Issues
+
+**1. EasyOCR First Run Delay**
+- **Issue:** First time running text detection takes 5-10 minutes to download models (~500MB)
+- **Workaround:** Pre-download models by running `python -c "import easyocr; easyocr.Reader(['en'])"`
+- **Severity:** Low - only affects first run
+
+**2. WebSocket Connection Timeout**
+- **Issue:** WebSocket connections may timeout after 5 minutes of inactivity
+- **Workaround:** Mobile app sends periodic ping messages to keep connection alive
+- **Severity:** Low - handled by app reconnection logic
+
+**3. Transit API Limited Coverage**
+- **Issue:** TransitApp API may not have data for all cities/regions
+- **Workaround:** System falls back to walking navigation when transit data unavailable
+- **Severity:** Medium - depends on user location
+
+**4. Face Recognition Performance**
+- **Issue:** DeepFace face matching can be slow on CPU-only systems (2-3 seconds per frame)
+- **Workaround:** Enable GPU acceleration if available, or reduce frame processing rate
+- **Severity:** Medium - affects real-time performance
+
+**5. Google Maps API Rate Limits**
+- **Issue:** Free tier has daily request limits (may affect heavy usage)
+- **Workaround:** Implement caching for frequent routes, or upgrade to paid tier
+- **Severity:** Low - only affects high-volume testing
+
+### AslBackend Issues
+
+**1. TensorFlow Version Conflicts**
+- **Issue:** TensorFlow 2.12 conflicts with main branch dependencies
+- **Workaround:** Run in separate virtual environment on different port
+- **Severity:** High - requires separate deployment
+
+**2. Hand Tracking Lighting Requirements**
+- **Issue:** MediaPipe hand tracking requires good lighting conditions
+- **Workaround:** Users should ensure adequate lighting for best results
+- **Severity:** Medium - affects detection accuracy
+
+### color-cue Issues
+
+**1. Dependency Conflicts**
+- **Issue:** Roboflow and Google Vision dependencies conflict with main branch
+- **Workaround:** Run in separate virtual environment on different port
+- **Severity:** High - requires separate deployment
+
+**2. Google Vision API Costs**
+- **Issue:** Google Cloud Vision API charges per request after free tier
+- **Workaround:** Monitor API usage and implement request caching
+- **Severity:** Medium - cost consideration for production
+
+**3. Roboflow API Key Hardcoded**
+- **Issue:** Roboflow API key is hardcoded in `colorcue_service.py` instead of environment variable
+- **Workaround:** Manually update key in code or move to .env file
+- **Severity:** Medium - security concern for production
+
+### General Issues
+
+**1. Database Connection Pool Exhaustion**
+- **Issue:** Under heavy load, database connection pool may exhaust
+- **Workaround:** Increase pool size in database configuration
+- **Severity:** Low - only affects high-concurrency scenarios
+
+**2. Large Image Upload Size**
+- **Issue:** Uploading very large images (>10MB) may cause timeout
+- **Workaround:** Compress images before upload, or increase timeout settings
+- **Severity:** Low - rare occurrence
+
+**3. Multiple Simultaneous Navigation Sessions**
+- **Issue:** Running multiple navigation sessions on same server may cause session confusion
+- **Workaround:** Ensure unique session IDs for each user
+- **Severity:** Low - proper session management handles this
+
+### Planned Fixes
+
+The following issues are planned to be addressed in future releases:
+- Merge AslBackend and color-cue into main branch (resolve dependency conflicts)
+- Implement proper API key management for all services
+- Add connection pooling and caching layers
+- Optimize model loading and inference times
+- Add comprehensive error handling and logging
 
 ---
 
