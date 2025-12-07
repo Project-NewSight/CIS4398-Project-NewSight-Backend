@@ -80,3 +80,4 @@ def test_websocket_error_handling():
     assert "error" in result
     assert "feature" in result["error"].lower()
 
+

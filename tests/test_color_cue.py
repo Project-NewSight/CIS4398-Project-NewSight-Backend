@@ -103,3 +103,4 @@ def test_colorcue_pattern_detection():
     test_pattern_invalid = 'rainbow-unicorn'
     assert test_pattern_invalid not in patterns
 
+

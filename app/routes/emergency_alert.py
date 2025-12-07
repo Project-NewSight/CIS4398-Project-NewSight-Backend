@@ -16,7 +16,7 @@ AWS_REGION = os.getenv("AWS_REGION")
 BUCKET_NAME = os.getenv("AWS_S3_BUCKET_NAME")
 FOLDER_NAME = os.getenv("AWS_S3_FOLDER_NAME")
 
-if not all([  # pragma: no cover
+if not all([
     os.getenv("AWS_ACCESS_KEY_ID"),
     os.getenv("AWS_SECRET_ACCESS_KEY"),
     AWS_REGION,
@@ -58,7 +58,7 @@ async def send_emergency_alert(user_id: int, request: Request, db: Session = Dep
               )
               image_url = f"https://{BUCKET_NAME}.s3.{AWS_REGION}.amazonaws.com/{key}"
 
-         except Exception as e:  # pragma: no cover
+         except Exception as e:
               raise HTTPException(status_code=500, detail=f"Error uploading photo: {str(e)}")
               
     

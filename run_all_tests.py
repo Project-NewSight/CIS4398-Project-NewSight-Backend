@@ -15,7 +15,7 @@ def run_tests():
     os.environ['COVERAGE_FILE'] = '.coverage'
     
     # Run all tests from unified tests/ directory
-    print("\n📦 All Backend Tests (Unified)...")
+    print("\nAll Backend Tests (Unified)...")
     subprocess.run([
         sys.executable, "-m", "pytest",
         "tests/",
@@ -27,7 +27,7 @@ def run_tests():
     ])
     
     # Generate combined HTML report
-    print("\n📊 Generating combined coverage report...")
+    print("\nGenerating combined coverage report...")
     subprocess.run([
         sys.executable, "-m", "coverage",
         "html",
@@ -36,7 +36,7 @@ def run_tests():
     
     # Generate terminal report
     print("\n" + "=" * 80)
-    print("📊 COMBINED COVERAGE REPORT - ALL BACKENDS")
+    print("COMBINED COVERAGE REPORT - ALL BACKENDS")
     print("=" * 80 + "\n")
     subprocess.run([
         sys.executable, "-m", "coverage",
@@ -45,8 +45,8 @@ def run_tests():
     ])
     
     print("\n" + "=" * 80)
-    print("✅ Combined coverage report generated!")
-    print(f"📂 Open: htmlcov_combined\\index.html")
+    print("Combined coverage report generated!")
+    print(f"Open: htmlcov_combined\\index.html")
     print("=" * 80)
 
 if __name__ == "__main__":

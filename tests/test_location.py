@@ -86,3 +86,4 @@ def test_location_accuracy():
     
     assert is_accurate is False  # Should trigger warning
 
+

@@ -74,3 +74,4 @@ def test_asl_confidence_threshold():
     assert prediction_high[1] >= MIN_CONFIDENCE
     assert prediction_low[1] < MIN_CONFIDENCE
 
+

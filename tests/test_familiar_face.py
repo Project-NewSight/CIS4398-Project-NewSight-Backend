@@ -71,3 +71,4 @@ def test_face_gallery_management():
     assert face_name in gallery[user_id]
     assert len(gallery[user_id]) == 1
 
+
