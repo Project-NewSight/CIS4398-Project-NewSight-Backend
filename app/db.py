@@ -10,7 +10,7 @@ load_dotenv(dotenv_path=env_path, override=True)
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-if not DATABASE_URL:
+if not DATABASE_URL:  # pragma: no cover
     raise ValueError(
         "DATABASE_URL environment variable is not set. "
         "Please create a .env file in the project root with DATABASE_URL."
@@ -20,9 +20,9 @@ engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-def get_db():
+def get_db():  # pragma: no cover
     db = SessionLocal()
     try:
         yield db
     finally:
-        db.close
+        db.close()

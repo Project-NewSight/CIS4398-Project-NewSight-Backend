@@ -96,7 +96,7 @@ tensorboard-data-server==0.6.1
 tensorboard-plugin-wit==1.8.1
 tensorflow==2.11.1
 tensorflow-estimator==2.11.0
-tensorflow-io-gcs-filesystem==0.37.1
+tensorflow-io-gcs-filesystem==0.31.0
 termcolor==3.2.0
 tqdm==4.67.1
 twilio==9.8.4
@@ -139,3 +139,8 @@ httpx==0.25.1
 
 # Text Detection / OCR
 easyocr==1.7.1
+
+# Testing dependencies
+pytest==7.4.3
+pytest-cov==4.1.0
+pytest-asyncio==0.21.1
