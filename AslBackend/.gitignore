@@ -1,0 +1,77 @@
+# -----------------------------------------
+# Python cache & build files
+# -----------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+build/
+dist/
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg
+*.egg-info/
+.installed.cfg
+
+# -----------------------------------------
+# Virtual Environments
+# -----------------------------------------
+venv/
+env/
+ENV/
+.venv/
+.env/
+
+# -----------------------------------------
+# Application Data
+# -----------------------------------------
+uploads/
+
+# -----------------------------------------
+# Models (large files downloaded at runtime)
+# -----------------------------------------
+models/*.tflite
+models/*.pt
+models/*.pth
+models/*.onnx
+
+# -----------------------------------------
+# IDE / Editor
+# -----------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# -----------------------------------------
+# Logs & Coverage
+# -----------------------------------------
+*.log
+logs/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# -----------------------------------------
+# OS files
+# -----------------------------------------
+.DS_Store
+Thumbs.db
+
+# -----------------------------------------
+# Environment variables
+# -----------------------------------------
+.env
+.env.local
+*.env

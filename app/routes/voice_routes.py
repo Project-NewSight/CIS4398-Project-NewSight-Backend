@@ -1,6 +1,9 @@
-from fastapi import APIRouter, UploadFile, File
+from fastapi import APIRouter, UploadFile, File, Header
 from app.services.voice_service import SpeechToText
 from app.services.voice_agent import VoiceCommandAgent
+from app.services.navigation_service import NavigationService
+from app.routes.location_routes import get_user_location
+from typing import Optional
 import tempfile
 import os
 
@@ -9,6 +12,7 @@ router = APIRouter(prefix="/voice", tags=["voice Commands"])
 
 transcriber = SpeechToText()
 agent = VoiceCommandAgent()
+nav_service = NavigationService()
 
 # listens for wake word
 @router.post("/wake-word")
@@ -38,9 +42,17 @@ async def check_wake_word(audio: UploadFile = File(...)):
         return {"error": str(e), "wake_word_detected": False}
 
 @router.post("/transcribe")
-async def process_voice_command(audio: UploadFile = File(...)):
+async def process_voice_command(
+    audio: UploadFile = File(...),
+    x_session_id: Optional[str] = Header(None)
+):
     """
     Receive audio, transcribe it, process with agent, and return JSON response
+    
+    For NAVIGATION feature:
+    - Pulls destination from voice_agent
+    - Gets location from location_routes
+    - Starts navigation and returns full route
     """
     try:
         # Save uploaded audio temporarily
@@ -62,7 +74,7 @@ async def process_voice_command(audio: UploadFile = File(...)):
             return {
                 "confidence": 0.0,
                 "extracted_params": {
-                    "feature": None,
+                    "feature": "None",
                     "query": ""
                 },
                 "TTS_Output": {
@@ -100,7 +112,111 @@ async def process_voice_command(audio: UploadFile = File(...)):
         filtered_response = filter_agent_response(agent_response)
         print(f"🤖 Agent response: {filtered_response}")
 
-        # Build JSON response
+        # ===== NAVIGATION INTEGRATION =====
+        # If voice agent identified NAVIGATION, check if user wants transit or walking
+        if agent_response.get("feature") == "NAVIGATION" and x_session_id:
+            destination = filtered_response.get("destination")
+            sub_features = filtered_response.get("sub_features", [])
+            
+            if destination:
+                print(f"🗺️  NAVIGATION feature detected - destination: '{destination}'")
+                print(f"🎯 Sub-features: {sub_features}")
+                
+                # Get user location from location WebSocket storage
+                location = get_user_location(x_session_id)
+                
+                if location:
+                    try:
+                        print(f"📍 Got location: ({location['latitude']}, {location['longitude']})")
+                        
+                        # Check for explicit transit keywords in the user's query
+                        query_lower = filtered_response.get("query", "").lower()
+                        transit_keywords = ["bus", "train", "subway", "metro", "rail", "transit"]
+                        explicit_transit = any(word in query_lower for word in transit_keywords)
+                        
+                        result = None
+                        
+                        if explicit_transit:
+                            print(f"🚌 User explicitly requested TRANSIT - using transit navigation")
+                            
+                            # Determine transit mode from query
+                            mode = "all"
+                            if "bus" in query_lower:
+                                mode = "bus"
+                            elif any(word in query_lower for word in ["train", "subway", "metro", "rail"]):
+                                mode = "train"
+                            
+                            # Get transit navigation
+                            result = nav_service.get_transit_navigation(
+                                session_id=x_session_id,
+                                origin_lat=location["latitude"],
+                                origin_lng=location["longitude"],
+                                destination=destination,
+                                mode=mode
+                            )
+                        else:
+                            print(f"🧠 Using SMART navigation (Walking < 30m ? Walking : Transit)")
+                            result = nav_service.get_smart_navigation(
+                                session_id=x_session_id,
+                                origin_lat=location["latitude"],
+                                origin_lng=location["longitude"],
+                                destination=destination
+                            )
+                        
+                        # Process the result
+                        nav_type = result.get("navigation_type", "walking")
+                        filtered_response["navigation_type"] = nav_type
+                        
+                        if nav_type == "transit":
+                            filtered_response["directions"] = result.get("directions")
+                            filtered_response["transit_info"] = result.get("transit_info")
+                            filtered_response["nearest_stop"] = result.get("nearest_stop")
+                            message = result.get("message", "Starting transit navigation")
+                        else:
+                            # Walking - handle both smart nav wrapper and raw directions fallback
+                            if "steps" in result:
+                                # Raw directions object (fallback case)
+                                filtered_response["directions"] = result
+                                message = result.get("message", f"Starting walking navigation to {destination}")
+                            else:
+                                # Smart nav wrapper
+                                filtered_response["directions"] = result.get("directions")
+                                message = result.get("message", f"Starting walking navigation")
+                            
+                        return {
+                            "confidence": agent_response.get("confidence", 0.0),
+                            "extracted_params": filtered_response,
+                            "TTS_Output": {
+                                "message": message
+                            }
+                        }
+                    
+                    except Exception as nav_error:
+                        print(f"❌ Navigation error: {str(nav_error)}")
+                        import traceback
+                        traceback.print_exc()
+                        filtered_response["navigation_error"] = str(nav_error)
+                        
+                        return {
+                            "confidence": agent_response.get("confidence", 0.0),
+                            "extracted_params": filtered_response,
+                            "TTS_Output": {
+                                "message": f"Found {destination}, but couldn't get directions. Please try again."
+                            }
+                        }
+                else:
+                    print(f"⚠️  No location found for session {x_session_id}")
+                    filtered_response["navigation_error"] = "Location not available"
+                    
+                    return {
+                        "confidence": agent_response.get("confidence", 0.0),
+                        "extracted_params": filtered_response,
+                        "TTS_Output": {
+                            "message": "I need your location to start navigation. Please enable GPS."
+                        }
+                    }
+
+        # Build JSON response for non-navigation features or if session_id not provided
         if agent_response.get("feature"):
             response_data = {
                 "confidence": agent_response.get("confidence", 0.0),
@@ -113,7 +229,7 @@ async def process_voice_command(audio: UploadFile = File(...)):
             response_data = {
                 "confidence": 0.0,
                 "extracted_params": {
-                    "feature": None,
+                    "feature": "NONE",
                     "query": text
                 },
                 "TTS_Output": {
@@ -131,7 +247,7 @@ async def process_voice_command(audio: UploadFile = File(...)):
         return {
             "confidence": 0.0,
             "extracted_params": {
-                "feature": None,
+                "feature": "NONE",
                 "query": "",
                 "error": str(e)
             },

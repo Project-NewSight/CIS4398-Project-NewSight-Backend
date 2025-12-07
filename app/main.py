@@ -1,5 +1,5 @@
 # Unified API for NewSight Backend
-# Combines Emergency Contact and Familiar Face Detection and Voice Command features
+# Combines Emergency Contact, Familiar Face Detection, Voice Command, Navigation, and Text Detection features
 import os
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,12 +9,17 @@ from app.routes import contacts
 from app.routes import emergency_alert
 from app.routes import familiar_face
 from app.routes import voice_routes
-from app.routes import object_detection_backend
+from app.routes import location_routes
+from app.routes import navigation_routes
+from app.routes import text_detection_routes
+from app.routes import unified_websocket
+
+# from app.routes import object_detection_backend
 
 app = FastAPI(
     title="NewSight API",
     version="1.0",
-    description="Backend API for Emergency Contact, Familiar Face Detection, and Voice Command features"
+    description="Backend API for Emergency Contact, Familiar Face Detection, Voice Command, Navigation, and Text Detection features"
 )
 
 # CORS middleware for WebSocket and API access
@@ -35,15 +40,27 @@ app.add_middleware(
 app.include_router(sms_routes.router)
 app.include_router(contacts.router)
 app.include_router(emergency_alert.router)
-app.include_router(object_detection_backend.router)
+#app.include_router(object_detection_backend.router)
 
 # Voice Command Feature Route
 app.include_router(voice_routes.router)
 
-# Familiar Face Detection Feature Routes
-# Register WebSocket routes directly to maintain original paths (/ws, /ws/verify)
-app.websocket("/ws")(familiar_face.ws_verify)
-app.websocket("/ws/verify")(familiar_face.ws_verify)
+# Navigation Feature Routes
+app.include_router(location_routes.router)
+app.include_router(navigation_routes.router)
+
+# Unified WebSocket Handler (supports both Familiar Face and Text Detection)
+# Routes to appropriate handler based on message format/feature field
+app.websocket("/ws")(unified_websocket.unified_websocket_handler)
+app.websocket("/ws/verify")(unified_websocket.unified_websocket_handler)
+
+# Navigation Feature Routes
+app.include_router(location_routes.router)
+app.include_router(navigation_routes.router)
+
+# Text Detection Feature Routes
+app.include_router(text_detection_routes.router)
+
 
 @app.get("/")
 def root():
@@ -52,8 +69,9 @@ def root():
         "features": [
             "Emergency Contact Management",
             "Familiar Face Detection",
-            "Voice Command"
+            "Voice Command",
+            "Navigation",
+            "Text Detection (OCR)",
             "Object Detection Backend"
-
         ]
     }

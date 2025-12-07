@@ -1,31 +1,94 @@
-# ---- Python cache & build files ----
+# Python
 __pycache__/
 *.py[cod]
+*$py.class
 *.so
-*.egg
-*.egg-info/
-dist/
-build/
+.Python
 
+# Virtual Environment
 venv/
-.env/
 env/
+ENV/
+env.bak/
+venv.bak/
+.env/
 .venv/
 
-uploads/
-
-*.env
-
-
+# IDE
+.idea/
 .vscode/
 
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Environment Variables
+.env
+*.env
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Project specific
+test_images/
+test_results/
+uploads/
+*.jpg
+*.png
+*.jpeg
+!example_*.jpg
+!example_*.png
+
+# OS specific
 .DS_Store
 Thumbs.db
+*.swp
+*.swo
+*~
 
+# Logs
 *.log
 logs/
 
-
-.pytest_cache/
-.coverage
-htmlcov/
+# Downloaded test files
+download
+text.jpg
